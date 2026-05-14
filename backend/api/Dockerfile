@@ -13,4 +13,5 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/api /api
 EXPOSE 8080
+ENV PORT=8080
 ENTRYPOINT ["/api"]

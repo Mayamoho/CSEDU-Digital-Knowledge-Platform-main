@@ -5,10 +5,15 @@ Next.js frontend application for the CSEDU Digital Knowledge Platform.
 ## 🚀 Deployment on Vercel
 
 ### Prerequisites
-- Vercel account
-- Backend API deployed and accessible
+- Vercel account (free tier available)
+- Backend deployed on Railway (or other platform)
+- Backend API URL
 
-### Steps
+### Quick Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/your-repo&root-directory=frontend&env=NEXT_PUBLIC_API_URL)
+
+### Manual Deployment Steps
 
 1. **Push to GitHub**
    ```bash
@@ -20,18 +25,62 @@ Next.js frontend application for the CSEDU Digital Knowledge Platform.
    ```
 
 2. **Import to Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Click "New Project"
-   - Import your GitHub repository
-   - Select the `frontend` directory as the root directory
+   - Go to [vercel.com/new](https://vercel.com/new)
+   - Click "Import Project"
+   - Select your GitHub repository
+   - **Important**: Set root directory to `frontend`
 
-3. **Configure Environment Variables**
-   Add the following environment variable in Vercel:
-   - `NEXT_PUBLIC_API_URL`: Your backend API URL (e.g., `https://your-api.com/api/v1`)
+3. **Configure Build Settings**
+   - Framework Preset: Next.js
+   - Build Command: `pnpm build`
+   - Output Directory: `.next`
+   - Install Command: `pnpm install`
+   - Root Directory: `frontend` ⚠️
 
-4. **Deploy**
+4. **Add Environment Variables**
+   In Vercel dashboard, add:
+   
+   | Name | Value | Example |
+   |------|-------|---------|
+   | `NEXT_PUBLIC_API_URL` | Your backend API URL | `https://your-api.up.railway.app/api/v1` |
+
+5. **Deploy**
    - Click "Deploy"
-   - Vercel will automatically build and deploy your application
+   - Wait for build to complete (~2 minutes)
+   - Your site will be live at `https://your-project.vercel.app`
+
+6. **Configure Custom Domain (Optional)**
+   - Go to Project Settings → Domains
+   - Add your custom domain
+   - Update DNS records as instructed
+
+### Automatic Deployments
+
+Vercel automatically deploys when you push to GitHub:
+
+```bash
+git add .
+git commit -m "Update feature"
+git push origin main
+# Vercel auto-deploys! ✨
+```
+
+### Environment Variables for Different Environments
+
+**Production:**
+```env
+NEXT_PUBLIC_API_URL=https://api.yourdomain.com/api/v1
+```
+
+**Preview (for testing):**
+```env
+NEXT_PUBLIC_API_URL=https://staging-api.yourdomain.com/api/v1
+```
+
+**Development:**
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+```
 
 ## 🛠️ Local Development
 
