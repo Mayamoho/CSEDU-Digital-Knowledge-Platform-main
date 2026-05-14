@@ -1,0 +1,8 @@
+FROM pgvector/pgvector:pg16
+
+# Copy initialization scripts
+COPY init.sql /docker-entrypoint-initdb.d/01-init.sql
+COPY migrate_project_fixes.sql /docker-entrypoint-initdb.d/02-migrate.sql
+
+# Ensure scripts are executable
+RUN chmod +x /docker-entrypoint-initdb.d/*.sql

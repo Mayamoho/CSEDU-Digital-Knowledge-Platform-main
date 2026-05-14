@@ -23,29 +23,38 @@ project-root/
 
 ## 🚀 Quick Start
 
-### Frontend (Vercel Deployment)
+### Option 1: Railway + Vercel (Recommended for Production)
 
-1. Navigate to frontend directory:
-   ```bash
-   cd frontend
-   ```
+**5-minute deployment to the cloud!**
 
-2. Follow the [Frontend README](./frontend/README.md) for:
-   - Local development setup
-   - Vercel deployment instructions
-   - Environment configuration
+1. **Deploy Backend to Railway**
+   - See [Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md)
+   - One-click PostgreSQL and Redis
+   - Auto-scaling and monitoring included
 
-### Backend (Docker Deployment)
+2. **Deploy Frontend to Vercel**
+   - Push to GitHub
+   - Import to Vercel
+   - Set root directory to `frontend`
+   - Add `NEXT_PUBLIC_API_URL` environment variable
 
-1. Navigate to backend directory:
-   ```bash
-   cd backend
-   ```
+**Total Cost**: ~$5-10/month
 
-2. Follow the [Backend README](./backend/README.md) for:
-   - Docker setup
-   - Service configuration
-   - Database initialization
+### Option 2: Local Development
+
+**For development and testing:**
+
+```bash
+# Backend
+cd backend
+docker compose up -d
+
+# Frontend
+cd frontend
+pnpm install && pnpm dev
+```
+
+See [Quick Start Guide](./QUICK_START.md) for detailed instructions.
 
 ## 🌟 Features
 
@@ -127,24 +136,39 @@ After initial setup, use these credentials to login:
 
 ## 🚢 Deployment
 
-### Frontend to Vercel
+### Production Deployment (Railway + Vercel)
 
-1. Push frontend code to GitHub
-2. Import project to Vercel
-3. Set root directory to `frontend`
-4. Configure environment variables
-5. Deploy
+**Recommended for production use:**
 
-See [Frontend README](./frontend/README.md) for detailed instructions.
+1. **Backend to Railway**
+   - Managed PostgreSQL and Redis
+   - Auto-scaling
+   - Built-in monitoring
+   - See [Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md)
 
-### Backend to VPS/Cloud
+2. **Frontend to Vercel**
+   - Global CDN
+   - Automatic HTTPS
+   - Zero-config deployment
+   - See [Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md)
 
-1. Clone repository on server
-2. Navigate to `backend` directory
-3. Configure `.env` file
-4. Run `docker compose up -d`
+**Cost**: ~$5-10/month
 
-See [Backend README](./backend/README.md) for detailed instructions.
+### Self-Hosted Deployment (Docker)
+
+**For VPS or on-premise:**
+
+1. Deploy backend with Docker Compose
+2. Deploy frontend to Vercel or self-host
+3. See [Deployment Guide](./DEPLOYMENT.md)
+
+### Quick Links
+
+- 📘 [Railway + Vercel Guide](./RAILWAY_DEPLOYMENT.md) - **Recommended**
+- 📗 [Docker Deployment Guide](./DEPLOYMENT.md)
+- 📙 [Quick Start](./QUICK_START.md)
+- 📕 [Frontend Setup](./frontend/README.md)
+- 📔 [Backend Setup](./backend/README.md)
 
 ## 🧪 Testing
 

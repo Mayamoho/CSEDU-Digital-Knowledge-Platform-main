@@ -1,0 +1,159 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: csedu-postgres
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./infra/db/Dockerfile.postgres
+    envVars:
+      - key: POSTGRES_USER
+        value: csedu_user
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+      - key: POSTGRES_DB
+        value: csedu_platform
+
+  # Redis Cache
+  - type: redis
+    name: csedu-redis
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+
+  # Go API Service
+  - type: web
+    name: csedu-api
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_HOST
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: host
+      - key: DB_PORT
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: port
+      - key: DB_USER
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: password
+      - key: DB_NAME
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: database
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: csedu-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRY_HOURS
+        value: 1
+      - key: REFRESH_EXPIRY_DAYS
+        value: 7
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_USER
+        sync: false
+      - key: MINIO_PASSWORD
+        sync: false
+      - key: MINIO_BUCKET
+        value: csedu-files
+      - key: RAG_SERVICE_URL
+        fromService:
+          type: web
+          name: csedu-rag
+          property: host
+      - key: APP_ENV
+        value: production
+      - key: FINE_RATE_PER_DAY
+        value: 50
+      - key: LOAN_PERIOD_DAYS
+        value: 14
+    healthCheckPath: /health
+
+  # Python RAG Service
+  - type: web
+    name: csedu-rag
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./rag/Dockerfile
+    dockerContext: ./rag
+    envVars:
+      - key: PORT
+        value: 8001
+      - key: DB_HOST
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: host
+      - key: DB_PORT
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: port
+      - key: DB_USER
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: password
+      - key: DB_NAME
+        fromService:
+          type: pserv
+          name: csedu-postgres
+          property: database
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: csedu-redis
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL_SIMPLE
+        value: llama-3.1-8b-instant
+      - key: GROQ_MODEL_LONG
+        value: meta-llama/llama-4-scout-17b-16e-instruct
+      - key: GROQ_MODEL_COMPLEX
+        value: openai/gpt-oss-120b
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash-exp
+      - key: EMBEDDING_MODEL
+        value: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      - key: EMBEDDING_DIMENSION
+        value: 768
+      - key: CHUNK_SIZE
+        value: 512
+      - key: CHUNK_OVERLAP
+        value: 50
+      - key: TOP_K_RESULTS
+        value: 10
+    healthCheckPath: /health

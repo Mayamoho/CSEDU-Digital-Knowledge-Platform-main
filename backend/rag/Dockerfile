@@ -18,8 +18,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy application code
 COPY . .
 
-# Expose port
+# Expose port (Render will set PORT env variable)
 EXPOSE 8001
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+# Run the application (use $PORT for Render compatibility)
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 2
