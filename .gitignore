@@ -1,0 +1,30 @@
+# Environment — never commit real secrets
+.env
+abc.env
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+
+# Go build artifacts
+api/bin/
+
+# Docker volumes (local dev)
+postgres_data/
+redis_data/
+minio_data/
+
+# OS
+.DS_Store
+*.swp
