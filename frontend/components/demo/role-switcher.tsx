@@ -76,8 +76,6 @@ export function RoleSwitcher() {
     // Enable mock mode and store selected role in localStorage
     localStorage.setItem('use_mock_mode', 'true');
     localStorage.setItem('mock_role', role);
-    console.log(`Switched to role: ${role}`);
-    console.log(`Mock user data:`, mockUsers[role]);
 
     // Force page reload to trigger mock auth with new role
     window.location.reload();

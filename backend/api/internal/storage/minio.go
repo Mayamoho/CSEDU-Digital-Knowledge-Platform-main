@@ -21,9 +21,16 @@ func NewMinio(ctx context.Context) (*MinioClient, error) {
 	if endpoint == "" {
 		endpoint = "minio:9000"
 	}
+	
+	// Check if SSL should be used (default to false for local, true for production)
+	useSSL := false
+	if sslEnv := os.Getenv("MINIO_USE_SSL"); sslEnv == "true" {
+		useSSL = true
+	}
+	
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(os.Getenv("MINIO_USER"), os.Getenv("MINIO_PASSWORD"), ""),
-		Secure: false,
+		Secure: useSSL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minio.New: %w", err)

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -62,9 +63,15 @@ func main() {
 	fineHandler := fine.NewHandler(pool)
 
 	// Create Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
-	})
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://redis:6379"
+	}
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("redis parse URL: %v", err)
+	}
+	redisClient := redis.NewClient(opt)
 
 	aiHandler := ai.NewHandler(pool, redisClient)
 	mediaHandler := media.NewHandler(pool, minio, redisClient)
@@ -81,8 +88,17 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Timeout(60 * time.Second))
 
+	// CORS configuration - allow frontend origins
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost"}
+	if customOrigins := os.Getenv("ALLOWED_ORIGINS"); customOrigins != "" {
+		// Split comma-separated origins from environment
+		for _, origin := range strings.Split(customOrigins, ",") {
+			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
+		}
+	}
+	
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -124,6 +140,7 @@ func main() {
 					r.Use(middleware.Authenticate)
 					r.Use(middleware.RequireRole("librarian", "administrator"))
 					r.Post("/", libraryHandler.AddBook)
+					r.Get("/my-books", libraryHandler.GetMyAddedBooks)
 				})
 			})
 

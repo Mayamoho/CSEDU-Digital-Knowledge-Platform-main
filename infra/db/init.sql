@@ -102,6 +102,7 @@ CREATE TABLE library_catalog (
     year             INT,
     total_copies     INT         NOT NULL DEFAULT 1,
     available_copies INT         NOT NULL DEFAULT 1,
+    created_by       UUID        REFERENCES users(user_id) ON DELETE SET NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
