@@ -149,40 +149,28 @@ class HybridRetriever:
         """
         k = 60
         scores = {}
+        result_map = {}
         
         # Score vector results
         for rank, result in enumerate(vector_results, start=1):
             chunk_id = result['embedding_id']
             scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
-            if chunk_id not in scores:
-                scores[chunk_id] = {'result': result, 'score': 0}
+            if chunk_id not in result_map:
+                result_map[chunk_id] = result
         
         # Score FTS results
         for rank, result in enumerate(fts_results, start=1):
             chunk_id = result['embedding_id']
-            if chunk_id not in scores:
-                scores[chunk_id] = {'result': result, 'score': 0}
             scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
+            if chunk_id not in result_map:
+                result_map[chunk_id] = result
         
         # Combine and sort by RRF score
         merged = []
-        seen_chunks = set()
-        
-        # Add vector results first (preserve some ordering)
-        for result in vector_results:
-            chunk_id = result['embedding_id']
-            if chunk_id not in seen_chunks:
-                result['rrf_score'] = scores.get(chunk_id, 0)
-                merged.append(result)
-                seen_chunks.add(chunk_id)
-        
-        # Add FTS results that weren't in vector results
-        for result in fts_results:
-            chunk_id = result['embedding_id']
-            if chunk_id not in seen_chunks:
-                result['rrf_score'] = scores.get(chunk_id, 0)
-                merged.append(result)
-                seen_chunks.add(chunk_id)
+        for chunk_id, score in scores.items():
+            result = result_map[chunk_id]
+            result['rrf_score'] = score
+            merged.append(result)
         
         # Sort by RRF score
         merged.sort(key=lambda x: x.get('rrf_score', 0), reverse=True)

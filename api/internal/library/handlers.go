@@ -584,6 +584,12 @@ func (h *Handler) WaiveFine(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/v1/library/catalog — add a single book (librarian/admin only)
 func (h *Handler) AddBook(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var req struct {
 		Title       string  `json:"title"`
 		Author      string  `json:"author"`
@@ -611,10 +617,10 @@ func (h *Handler) AddBook(w http.ResponseWriter, r *http.Request) {
 
 	var catalogID string
 	err := h.db.QueryRow(r.Context(),
-		`INSERT INTO library_catalog (title, author, isbn, format, location, year, total_copies, available_copies)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+		`INSERT INTO library_catalog (title, author, isbn, format, location, year, total_copies, available_copies, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
 		 RETURNING catalog_id`,
-		req.Title, req.Author, req.ISBN, req.Format, req.Location, req.Year, req.TotalCopies,
+		req.Title, req.Author, req.ISBN, req.Format, req.Location, req.Year, req.TotalCopies, userID,
 	).Scan(&catalogID)
 
 	if err != nil {
@@ -629,5 +635,76 @@ func (h *Handler) AddBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"catalog_id": catalogID,
 		"message":    "book added successfully",
+	})
+}
+
+// GET /api/v1/library/catalog/my-books — list books added by current user (librarian)
+func (h *Handler) GetMyAddedBooks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
+	offset := (page - 1) * perPage
+
+	// Count total
+	var total int
+	_ = h.db.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM library_catalog WHERE created_by = $1`, userID).Scan(&total)
+
+	// Get books
+	rows, err := h.db.Query(r.Context(),
+		`SELECT catalog_id, title, author, isbn, format, available_copies,
+		        total_copies, location, cover_image, year,
+		        to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		 FROM library_catalog
+		 WHERE created_by = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`, userID, perPage, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+
+	type bookItem struct {
+		CatalogID       string  `json:"catalog_id"`
+		Title           string  `json:"title"`
+		Author          string  `json:"author"`
+		ISBN            *string `json:"isbn"`
+		Format          string  `json:"format"`
+		AvailableCopies int     `json:"available_copies"`
+		TotalCopies     int     `json:"total_copies"`
+		Location        *string `json:"location"`
+		CoverImage      *string `json:"cover_image"`
+		Year            *int    `json:"year"`
+		CreatedAt       string  `json:"created_at"`
+	}
+
+	books := []bookItem{}
+	for rows.Next() {
+		var b bookItem
+		if err := rows.Scan(&b.CatalogID, &b.Title, &b.Author, &b.ISBN,
+			&b.Format, &b.AvailableCopies, &b.TotalCopies,
+			&b.Location, &b.CoverImage, &b.Year, &b.CreatedAt); err != nil {
+			continue
+		}
+		books = append(books, b)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":  books,
+		"total": total,
+		"page":  page,
+		"per_page": perPage,
 	})
 }

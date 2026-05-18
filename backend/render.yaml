@@ -80,6 +80,10 @@ services:
         sync: false
       - key: MINIO_BUCKET
         value: csedu-files
+      - key: MINIO_USE_SSL
+        value: true
+      - key: ALLOWED_ORIGINS
+        sync: false
       - key: RAG_SERVICE_URL
         fromService:
           type: web
