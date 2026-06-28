@@ -131,16 +131,17 @@ services:
 
   # ──────────────────────────────────────────────────────────────────
   # rag DISABLED for low-RAM deployment (4 GiB VM).
-  # Re-enable by removing the leading underscore from "rag:" below
-  # AND uncommenting the build step in deploy.sh.
+  # Tagged with profile: ["ai"] so it's skipped unless you opt in:
+  #   docker compose --profile ai up -d rag
   # When disabled, AI chat endpoints will return errors but the rest
   # of the app (library, catalog, projects, fines) still works.
   # ──────────────────────────────────────────────────────────────────
-  _rag:
+  rag:
     build:
       context: ./rag
       dockerfile: Dockerfile
     container_name: csedu_rag
+    profiles: ["ai"]
     expose:
       - "8001"
     env_file:
@@ -158,12 +159,14 @@ services:
 
   # ──────────────────────────────────────────────────────────────────
   # ingestion-worker DISABLED for low-RAM deployment (4 GiB VM).
+  # Opt in with: docker compose --profile ai up -d ingestion-worker
   # ──────────────────────────────────────────────────────────────────
-  _ingestion-worker:
+  ingestion-worker:
     build:
       context: ./api
       dockerfile: Dockerfile.worker
     container_name: csedu_ingestion_worker
+    profiles: ["ai"]
     env_file:
       - .env
     environment:
