@@ -80,9 +80,17 @@ if command -v free >/dev/null 2>&1; then
     fi
 fi
 
-# Order matters: lightweight first so the heaviest (rag, ~500 MB model
-# download) is built last when the most RAM is free.
-BUILD_ORDER=(postgres redis minio frontend api rag ingestion-worker fine-worker)
+# Order matters: lightweight first so the heaviest compile is done
+# when the most RAM is free.
+#
+# rag + ingestion-worker are SKIPPED on this 4 GiB VM — they pull
+# Python + a 500 MB embedding model and OOM even with swap. The app
+# runs fine without them; AI chat endpoints will return errors but
+# the rest of the platform (library, catalog, projects, fines)
+# still works. To re-enable later, remove the leading underscore
+# in docker-compose.prod.yml and add rag and ingestion-worker back
+# to BUILD_ORDER below.
+BUILD_ORDER=(postgres redis minio frontend api fine-worker)
 for svc in "${BUILD_ORDER[@]}"; do
     log "Building: $svc ..."
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build "$svc"

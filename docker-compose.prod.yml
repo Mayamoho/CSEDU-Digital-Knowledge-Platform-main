@@ -129,12 +129,18 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  rag:
+  # ──────────────────────────────────────────────────────────────────
+  # rag DISABLED for low-RAM deployment (4 GiB VM).
+  # Re-enable by removing the leading underscore from "rag:" below
+  # AND uncommenting the build step in deploy.sh.
+  # When disabled, AI chat endpoints will return errors but the rest
+  # of the app (library, catalog, projects, fines) still works.
+  # ──────────────────────────────────────────────────────────────────
+  _rag:
     build:
       context: ./rag
       dockerfile: Dockerfile
     container_name: csedu_rag
-    # No host port — api container reaches it on internal Docker network
     expose:
       - "8001"
     env_file:
@@ -150,7 +156,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  ingestion-worker:
+  # ──────────────────────────────────────────────────────────────────
+  # ingestion-worker DISABLED for low-RAM deployment (4 GiB VM).
+  # ──────────────────────────────────────────────────────────────────
+  _ingestion-worker:
     build:
       context: ./api
       dockerfile: Dockerfile.worker
