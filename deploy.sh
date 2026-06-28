@@ -61,9 +61,32 @@ if [ ! -f "$ENV_FILE" ]; then
     fi
 fi
 
-# --- 4. Pull base images and build app images ---------------------
-log "Building images (this may take several minutes the first time)..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
+# --- 4. Build images SEQUENTIALLY (parallel build OOMs 4 GiB VMs) -
+# Building all five images at once made the system hang by trying
+# to keep several heavy compilers in RAM at the same time. Build one
+# image at a time so RAM is reused, not duplicated.
+log "Building images SEQUENTIALLY — this avoids OOM on small VMs."
+log "(first run takes 5-15 minutes, later runs are near-instant)"
+
+# Available RAM check — warn the user, do not abort.
+if command -v free >/dev/null 2>&1; then
+    TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
+    log "Detected RAM: ${TOTAL_RAM_MB} MiB"
+    if [ "${TOTAL_RAM_MB:-0}" -lt 6000 ]; then
+        log "  WARNING: <6 GiB RAM. If the build hangs or fails with"
+        log "  'Cannot connect to Docker daemon', add swap first:"
+        log "    sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile"
+        log "    sudo mkswap /swapfile && sudo swapon /swapfile"
+    fi
+fi
+
+# Order matters: lightweight first so the heaviest (rag, ~500 MB model
+# download) is built last when the most RAM is free.
+BUILD_ORDER=(postgres redis minio frontend api rag ingestion-worker fine-worker)
+for svc in "${BUILD_ORDER[@]}"; do
+    log "Building: $svc ..."
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build "$svc"
+done
 
 # --- 5. Start the stack -------------------------------------------
 log "Starting services..."
