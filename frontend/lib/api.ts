@@ -1,14 +1,23 @@
 // API Client for CSEDU Digital Knowledge Platform
 // Connects to Go API Server (Port 8080)
 
-// Use internal Docker network URL for server-side requests, external URL for client-side
+// Use internal Docker network URL for server-side requests,
+// and SAME-ORIGIN relative URL for client-side requests so the
+// browser hits /api/v1/* on the current host. Nginx on the same
+// host then reverse-proxies those requests to the api container.
 const getApiBaseUrl = () => {
-  // Server-side (during SSR/SSG)
+  // Server-side (during SSR/SSG) — can reach api container directly
   if (typeof window === 'undefined') {
     return process.env.INTERNAL_API_URL || 'http://api:8080/api/v1';
   }
-  // Client-side (in browser) - always use localhost:8080 when accessing directly
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+  // Client-side (in browser) — relative URL so it goes to the
+  // current host (e.g. http://20.195.127.226:8080), and Nginx
+  // reverse-proxies /api/v1/* to the api container.
+  // NEXT_PUBLIC_API_URL is still respected as an override.
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  return '/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();

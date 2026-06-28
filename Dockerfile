@@ -15,7 +15,8 @@ COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+# NEXT_PUBLIC_API_URL is set at container start (in docker-compose.prod.yml)
+# so it's the right host for the current deployment. Don't bake it here.
 RUN corepack enable && pnpm build
 
 # ── Stage 3: run ─────────────────────────────────────────────────────────────

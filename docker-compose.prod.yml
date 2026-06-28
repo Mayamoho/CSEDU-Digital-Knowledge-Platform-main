@@ -96,10 +96,12 @@ services:
       - "3000"
     environment:
       - NODE_ENV=production
-      # Browsers hit the public entry point on port 8080:
-      - NEXT_PUBLIC_API_URL=http://20.195.127.226:8080/api/v1
-      # Internal Docker network — Nginx already proxies /api/v1/* to api,
-      # but Next.js rewrites still need a default:
+      # NOTE: We deliberately do NOT set NEXT_PUBLIC_API_URL here.
+      # The frontend's client-side code uses a SAME-ORIGIN relative
+      # URL (/api/v1) so it works regardless of which public host
+      # the browser is hitting. Nginx on port 8080 then reverse-
+      # proxies /api/v1/* to the api container.
+      # Internal Docker network for server-side rendering (SSR):
       - INTERNAL_API_URL=http://api:8080/api/v1
     depends_on:
       - api
