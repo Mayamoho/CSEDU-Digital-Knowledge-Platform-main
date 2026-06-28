@@ -26,8 +26,8 @@ const years = [
 
 const accessTiers = [
   { id: "public", label: "Public", count: 89 },
-  { id: "member", label: "Members", count: 34 },
-  { id: "staff", label: "Staff Only", count: 12 },
+  { id: "student", label: "Students", count: 34 },
+  { id: "librarian", label: "Librarians Only", count: 12 },
   { id: "restricted", label: "Restricted", count: 4 },
 ];
 

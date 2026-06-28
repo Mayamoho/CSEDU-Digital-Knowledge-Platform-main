@@ -102,9 +102,12 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   if (error || !item) {
     return (
       <div className="container max-w-4xl px-4 py-8">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-6">
-          <ArrowLeft className="h-4 w-4 mr-2" /> Back
-        </Button>
+        {/* Sticky back button */}
+        <div className="sticky top-16 z-10 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 py-4 -mx-4 px-4 mb-2">
+          <Button variant="ghost" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+          </Button>
+        </div>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error || "Item not found"}</AlertDescription>

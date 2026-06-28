@@ -7,16 +7,7 @@ const getApiBaseUrl = () => {
   if (typeof window === 'undefined') {
     return process.env.INTERNAL_API_URL || 'http://api:8080/api/v1';
   }
-  // Client-side (in browser)
-  // Check if running in browser and use window.location to determine the correct API URL
-  if (typeof window !== 'undefined') {
-    // If accessing via localhost:3000, use localhost:8080
-    // If accessing via localhost (port 80), use localhost/api/v1
-    const isDirectAccess = window.location.port === '3000';
-    if (isDirectAccess) {
-      return 'http://localhost:8080/api/v1';
-    }
-  }
+  // Client-side (in browser) - always use localhost:8080 when accessing directly
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 };
 

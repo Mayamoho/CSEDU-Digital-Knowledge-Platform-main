@@ -22,7 +22,7 @@ export default function UploadArchivePage() {
         </div>
 
         <UploadForm 
-          defaultAccessTier="staff"
+          defaultAccessTier="librarian"
           allowedFormats={['pdf', 'docx', 'doc', 'jpg', 'png']}
           title="Upload Archive Materials"
           description="Upload historical documents, departmental records, and archival materials."

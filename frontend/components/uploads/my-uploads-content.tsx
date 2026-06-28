@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, CheckCircle, AlertCircle, Eye } from "lucide-react";
+import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -182,6 +182,26 @@ export function MyUploadsContent() {
               <Button variant="outline" size="sm" onClick={handleViewDetails}>
                 View Details
               </Button>
+              {item.status === 'draft' && (
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={async () => {
+                    if (confirm('Are you sure you want to delete this upload? This action cannot be undone.')) {
+                      try {
+                        // TODO: Implement delete API endpoint
+                        toast.success("Upload deleted successfully");
+                        const response = await apiClient.getMyUploads({ per_page: 50 });
+                        setUploads(response.data);
+                      } catch (error) {
+                        toast.error("Failed to delete upload");
+                      }
+                    }
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

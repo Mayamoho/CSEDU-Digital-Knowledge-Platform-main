@@ -40,12 +40,6 @@ const mainNavItems = [
   { href: "/projects", label: "Projects", icon: BookOpen },
 ];
 
-const uploadNavItems = [
-  { href: "/upload/research", label: "Upload Research", icon: Upload },
-  { href: "/upload/projects", label: "Upload Projects", icon: Upload },
-  { href: "/upload/archive", label: "Upload Archive", icon: Upload },
-];
-
 export function Header() {
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuth();
@@ -100,29 +94,17 @@ export function Header() {
               {item.label}
             </Link>
           ))}
-          
-          {/* Upload navigation */}
-          {isAuthenticated && user && (user.role_tier === 'student' || user.role_tier === 'researcher' || user.role_tier === 'librarian' || user.role_tier === 'administrator') &&
-            uploadNavItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  pathname === item.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            ))}
         </nav>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {/* Search button */}
+          {/* Mobile Search button - visible on mobile */}
+          <Button variant="ghost" size="icon" className="sm:hidden">
+            <Search className="h-5 w-5" />
+            <span className="sr-only">Search</span>
+          </Button>
+
+          {/* Desktop Search button */}
           <Button variant="ghost" size="icon" className="hidden sm:flex">
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>

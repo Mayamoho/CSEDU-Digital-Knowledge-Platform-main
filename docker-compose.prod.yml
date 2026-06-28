@@ -1,13 +1,33 @@
+# ============================================================
+# CSEDU Digital Knowledge Platform — Production docker-compose
+# ONLY port 8080 (nginx) is exposed to the host. Everything else
+# (api, rag, postgres, redis, minio, workers) lives on the internal
+# Docker network and is reachable only from inside the container
+# group — this keeps the host port budget tiny for shared VMs.
+#
+# Port map:
+#   8080 → nginx   (entry point: web app + reverse-proxied /api/v1)
+#
+# To debug a service, exec into it from inside Docker:
+#   docker compose exec postgres psql -U csedu_user -d csedu_platform
+#   docker compose exec redis redis-cli
+#   docker compose exec minio mc ls local/
+#
+# Available host ports on this VM: 8080-8088 (8089/8090 taken).
+# This stack consumes ONE of them: 8080.
+# ============================================================
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: csedu_postgres
     environment:
       POSTGRES_USER: ${DB_USER:-csedu_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_prod}
       POSTGRES_DB: ${DB_NAME:-csedu_platform}
-    ports:
-      - "5432:5432"
+    # No host port — internal only
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -22,8 +42,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: csedu_redis
-    ports:
-      - "6379:6379"
+    # No host port — internal only
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,10 +60,11 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-changeme_in_dev}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-changeme_in_prod}
+    # No host ports — internal only (API on 9000, console on 9001)
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -56,7 +78,7 @@ services:
     image: nginx:alpine
     container_name: csedu_nginx
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -69,14 +91,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: csedu_frontend
-    ports:
-      - "3000:3000"
+    # No host port — Nginx reaches it on internal Docker network
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+      # Browsers hit the public entry point on port 8080:
+      - NEXT_PUBLIC_API_URL=http://20.195.127.226:8080/api/v1
+      # Internal Docker network — Nginx already proxies /api/v1/* to api,
+      # but Next.js rewrites still need a default:
       - INTERNAL_API_URL=http://api:8080/api/v1
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - api
     restart: unless-stopped
@@ -86,8 +110,9 @@ services:
       context: ./api
       dockerfile: Dockerfile
     container_name: csedu_api
-    ports:
-      - "8080:8080"
+    # No host port — Nginx reverse-proxies /api/v1/* here
+    expose:
+      - "8080"
     env_file:
       - .env
     environment:
@@ -109,8 +134,9 @@ services:
       context: ./rag
       dockerfile: Dockerfile
     container_name: csedu_rag
-    ports:
-      - "8001:8001"
+    # No host port — api container reaches it on internal Docker network
+    expose:
+      - "8001"
     env_file:
       - .env
     environment:
@@ -162,8 +188,9 @@ services:
   prometheus:
     image: prom/prometheus
     container_name: csedu_prometheus
-    ports:
-      - "9090:9090"
+    # No host port — debug via `docker compose exec prometheus ...` if needed
+    expose:
+      - "9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     profiles:
@@ -173,8 +200,9 @@ services:
   grafana:
     image: grafana/grafana
     container_name: csedu_grafana
-    ports:
-      - "3001:3000"
+    # No host port — debug via `docker compose exec grafana ...` if needed
+    expose:
+      - "3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
