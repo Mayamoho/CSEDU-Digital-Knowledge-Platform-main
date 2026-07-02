@@ -1,4 +1,3 @@
-#!/bin/bash
 # Quick update script for server deployment
 # Run this on the server at ~/csedu-platform
 
@@ -14,15 +13,15 @@ echo "1. Pulling latest changes from git..."
 git fetch origin
 git reset --hard origin/main
 
-# Rebuild frontend with all UI/UX fixes
+# Rebuild frontend and RAG service with all fixes
 echo ""
-echo "2. Rebuilding frontend..."
-docker compose -f docker-compose.prod.yml build frontend
+echo "2. Rebuilding frontend and RAG service..."
+docker compose -f docker-compose.prod.yml build frontend rag
 
-# Restart the stack
+# Restart the stack (including RAG now)
 echo ""
 echo "3. Restarting services..."
-docker compose -f docker-compose.prod.yml up -d nginx frontend api
+docker compose -f docker-compose.prod.yml up -d nginx frontend api rag
 
 # Show status
 echo ""
@@ -38,5 +37,6 @@ echo ""
 echo "Check logs with:"
 echo "  docker compose -f docker-compose.prod.yml logs -f frontend"
 echo "  docker compose -f docker-compose.prod.yml logs -f api"
+echo "  docker compose -f docker-compose.prod.yml logs -f rag"
 echo "  docker compose -f docker-compose.prod.yml logs -f nginx"
 echo "======================================"

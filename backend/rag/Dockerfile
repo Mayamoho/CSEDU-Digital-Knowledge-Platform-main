@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 8001
 
 # Run the application (use $PORT for Render compatibility)
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 2
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 1
