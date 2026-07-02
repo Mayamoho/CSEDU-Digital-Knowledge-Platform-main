@@ -13,3 +13,4 @@ python-multipart==0.0.6
 httpx==0.26.0
 redis==5.0.1
 transformers==4.36.2
+huggingface_hub==0.19.4
