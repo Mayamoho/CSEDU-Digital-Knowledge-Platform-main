@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +42,7 @@ const mainNavItems = [
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -99,13 +100,23 @@ export function Header() {
         {/* Right side */}
         <div className="flex items-center gap-2">
           {/* Mobile Search button - visible on mobile */}
-          <Button variant="ghost" size="icon" className="sm:hidden">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="sm:hidden"
+            onClick={() => router.push("/search")}
+          >
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>
           </Button>
 
           {/* Desktop Search button */}
-          <Button variant="ghost" size="icon" className="hidden sm:flex">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="hidden sm:flex"
+            onClick={() => router.push("/search")}
+          >
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>
           </Button>
