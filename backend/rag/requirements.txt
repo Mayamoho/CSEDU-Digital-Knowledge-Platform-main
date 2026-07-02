@@ -4,7 +4,7 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 psycopg[binary]==3.1.18
 pgvector==0.2.4
-sentence-transformers==2.3.1
+sentence-transformers==2.2.2
 torch==2.1.2
 numpy==1.26.3
 langdetect==1.0.9
@@ -12,3 +12,4 @@ PyMuPDF==1.23.21
 python-multipart==0.0.6
 httpx==0.26.0
 redis==5.0.1
+transformers==4.36.2
