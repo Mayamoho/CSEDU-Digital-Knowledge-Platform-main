@@ -543,3 +543,44 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
 	})
 }
+
+// DeleteMedia handles DELETE /media/{itemId} — deletes a draft media item
+func (h *Handler) DeleteMedia(w http.ResponseWriter, r *http.Request) {
+	itemID := chi.URLParam(r, "itemId")
+	userID := r.Context().Value(authpkg.UserIDKey).(string)
+	roleTier := r.Context().Value(authpkg.RoleKey).(string)
+
+	var ownerID, status, filePath string
+	err := h.db.QueryRow(r.Context(),
+		`SELECT created_by, COALESCE(status, 'draft'), COALESCE(file_path, '') FROM media_items WHERE item_id = $1`,
+		itemID).Scan(&ownerID, &status, &filePath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "media item not found")
+		return
+	}
+
+	isStaff := roleTier == "librarian" || roleTier == "administrator"
+	if ownerID != userID && !isStaff {
+		writeError(w, http.StatusForbidden, "you can only delete your own uploads")
+		return
+	}
+
+	if status != "draft" && !isStaff {
+		writeError(w, http.StatusBadRequest, "only draft items can be deleted")
+		return
+	}
+
+	_, err = h.db.Exec(r.Context(), `DELETE FROM media_items WHERE item_id = $1`, itemID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete media item")
+		return
+	}
+
+	if filePath != "" {
+		if err := h.minio.Delete(r.Context(), filePath); err != nil {
+			fmt.Printf("warning: failed to delete file from MinIO: %v\n", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "media item deleted successfully"})
+}

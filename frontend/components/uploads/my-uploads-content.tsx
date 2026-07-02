@@ -189,12 +189,11 @@ export function MyUploadsContent() {
                   onClick={async () => {
                     if (confirm('Are you sure you want to delete this upload? This action cannot be undone.')) {
                       try {
-                        // TODO: Implement delete API endpoint
+                        await apiClient.deleteMedia(item.item_id);
                         toast.success("Upload deleted successfully");
-                        const response = await apiClient.getMyUploads({ per_page: 50 });
-                        setUploads(response.data);
+                        setUploads(prev => prev.filter(u => u.item_id !== item.item_id));
                       } catch (error) {
-                        toast.error("Failed to delete upload");
+                        toast.error(error instanceof Error ? error.message : "Failed to delete upload");
                       }
                     }
                   }}

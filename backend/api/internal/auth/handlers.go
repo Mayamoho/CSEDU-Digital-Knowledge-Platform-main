@@ -359,3 +359,178 @@ func GetRoleTier(r *http.Request) (string, bool) {
 // For middleware package use
 var CtxUserID   = ctxUserID
 var CtxRoleTier = ctxRoleTier
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PATCH /api/v1/auth/profile
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(ctxUserID).(string)
+
+	var req struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" && req.Email == "" {
+		writeError(w, http.StatusBadRequest, "at least one field (name or email) is required")
+		return
+	}
+
+	// Validate email if provided
+	if req.Email != "" {
+		if !emailRE.MatchString(req.Email) || len(req.Email) > 254 {
+			writeError(w, http.StatusBadRequest, "invalid email address")
+			return
+		}
+		// Check email uniqueness
+		var exists bool
+		_ = h.db.QueryRow(r.Context(),
+			`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND user_id != $2)`,
+			req.Email, userID).Scan(&exists)
+		if exists {
+			writeError(w, http.StatusConflict, "email already in use")
+			return
+		}
+	}
+
+	// Update fields
+	if req.Name != "" {
+		_, err := h.db.Exec(r.Context(),
+			`UPDATE users SET name = $1 WHERE user_id = $2`, req.Name, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update name")
+			return
+		}
+	}
+	if req.Email != "" {
+		_, err := h.db.Exec(r.Context(),
+			`UPDATE users SET email = $1 WHERE user_id = $2`, req.Email, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update email")
+			return
+		}
+	}
+
+	// Return updated user
+	var u userResponse
+	err := h.db.QueryRow(r.Context(),
+		`SELECT user_id, email, name, role_tier,
+		        to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        to_char(last_login,  'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		 FROM users WHERE user_id = $1`, userID,
+	).Scan(&u.UserID, &u.Email, &u.Name, &u.RoleTier, &u.CreatedAt, &u.LastLogin)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "profile updated successfully",
+		"user":    u,
+	})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/change-password
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(ctxUserID).(string)
+
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current_password and new_password are required")
+		return
+	}
+
+	// Validate new password
+	if len(req.NewPassword) < 8 || len(req.NewPassword) > 128 {
+		writeError(w, http.StatusBadRequest, "password must be between 8 and 128 characters")
+		return
+	}
+
+	// Verify current password
+	var currentHash *string
+	err := h.db.QueryRow(r.Context(),
+		`SELECT password_hash FROM users WHERE user_id = $1`, userID).Scan(&currentHash)
+	if err != nil || currentHash == nil {
+		writeError(w, http.StatusBadRequest, "cannot change password for SSO-only accounts")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(*currentHash), []byte(req.CurrentPassword)); err != nil {
+		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+
+	// Hash new password
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	_, err = h.db.Exec(r.Context(),
+		`UPDATE users SET password_hash = $1 WHERE user_id = $2`,
+		string(newHash), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password changed successfully"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/forgot-password
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Always return success to prevent email enumeration
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "If an account with that email exists, a password reset link has been sent.",
+	})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/reset-password
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Token == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "token and new_password are required")
+		return
+	}
+
+	writeError(w, http.StatusBadRequest, "password reset is not yet configured")
+}

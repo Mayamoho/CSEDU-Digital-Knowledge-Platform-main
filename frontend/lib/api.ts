@@ -628,6 +628,61 @@ class APIClient {
       body: JSON.stringify({ approved, notes }),
     });
   }
+
+  // Delete media item
+  async deleteMedia(itemId: string): Promise<{ message: string }> {
+    return this.request(`/media/${itemId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Hold/Reservation system
+  async placeHold(catalogId: string): Promise<{ message: string; hold_id: string }> {
+    return this.request('/library/holds', {
+      method: 'POST',
+      body: JSON.stringify({ catalog_id: catalogId }),
+    });
+  }
+
+  async getMyHolds(): Promise<{ data: Array<{ hold_id: string; catalog_id: string; title: string; placed_at: string; expires_at: string | null; status: string }>; total: number }> {
+    return this.request('/library/holds');
+  }
+
+  async cancelHold(holdId: string): Promise<{ message: string }> {
+    return this.request(`/library/holds/${holdId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Profile management
+  async updateProfile(data: { name?: string; email?: string }): Promise<{ message: string; user: User }> {
+    return this.request('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async changePassword(data: { current_password: string; new_password: string }): Promise<{ message: string }> {
+    return this.request('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Password reset
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return this.request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    return this.request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  }
 }
 
 export const apiClient = new APIClient();

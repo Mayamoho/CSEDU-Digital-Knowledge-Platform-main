@@ -121,13 +121,14 @@ export default function RegisterPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="you@cs.du.ac.bd"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={isLoading}
-                  autoComplete="email"
+                  autoComplete="username"
                 />
                 <p className="text-xs text-muted-foreground">
                   Use your university email for member access

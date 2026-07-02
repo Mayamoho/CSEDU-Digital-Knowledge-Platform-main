@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api";
@@ -30,6 +30,7 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBorrowing, setIsBorrowing] = useState(false);
+  const [isReserving, setIsReserving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,6 +61,18 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
       toast.error(err instanceof Error ? err.message : "Failed to borrow book");
     } finally {
       setIsBorrowing(false);
+    }
+  };
+
+  const handleReserve = async () => {
+    try {
+      setIsReserving(true);
+      await apiClient.placeHold(itemId);
+      toast.success("Reservation placed! You'll be notified when it's available.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to place reservation");
+    } finally {
+      setIsReserving(false);
     }
   };
 
@@ -204,7 +217,27 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
                   </AlertDescription>
                 </Alert>
               )}
-              {!isAvailable && (
+              {!isAvailable && canBorrow && (
+                <div className="p-4 rounded-lg border border-dashed border-muted-foreground/25">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Currently Unavailable</p>
+                      <p className="text-sm text-muted-foreground">
+                        All copies are checked out. You can reserve a copy.
+                      </p>
+                    </div>
+                    <Button 
+                      variant="outline"
+                      onClick={handleReserve}
+                      disabled={isReserving}
+                    >
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      {isReserving ? "Reserving..." : "Reserve Copy"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {!isAvailable && !canBorrow && (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>

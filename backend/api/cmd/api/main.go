@@ -78,6 +78,7 @@ func main() {
 	adminHandler := admin.NewHandler(pool)
 	researchHandler := research.NewHandler(pool)
 	projectsHandler := projects.NewHandler(pool)
+	holdHandler := library.NewHoldHandler(pool)
 
 	r := chi.NewRouter()
 
@@ -96,7 +97,7 @@ func main() {
 			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
 		}
 	}
-	
+
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
@@ -118,12 +119,16 @@ func main() {
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/forgot-password", authHandler.ForgotPassword)
+			r.Post("/reset-password", authHandler.ResetPassword)
 
 			// Protected auth routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)
 				r.Get("/me", authHandler.Me)
 				r.Post("/logout", authHandler.Logout)
+				r.Patch("/profile", authHandler.UpdateProfile)
+				r.Post("/change-password", authHandler.ChangePassword)
 			})
 		})
 
@@ -134,7 +139,7 @@ func main() {
 				// Public GET access
 				r.With(middleware.OptionalAuth).Get("/", libraryHandler.ListCatalog)
 				r.With(middleware.OptionalAuth).Get("/{itemId}", libraryHandler.GetCatalogItem)
-				
+
 				// Librarian/admin POST access
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.Authenticate)
@@ -150,9 +155,17 @@ func main() {
 				r.Post("/", libraryHandler.BorrowBook)
 				r.Get("/", libraryHandler.ListLoans)
 				r.Post("/{loanId}/return", libraryHandler.ReturnBook)
-				
+
 				// Staff/admin only
 				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllLoans)
+			})
+
+			// Hold routes
+			r.Route("/holds", func(r chi.Router) {
+				r.Use(middleware.Authenticate)
+				r.Post("/", holdHandler.PlaceHold)
+				r.Get("/", holdHandler.ListHolds)
+				r.Delete("/{holdId}", holdHandler.CancelHold)
 			})
 
 			// Fine routes
@@ -160,7 +173,7 @@ func main() {
 				r.Use(middleware.Authenticate)
 				r.Get("/", libraryHandler.ListFines)
 				r.Post("/{fineId}/pay", libraryHandler.PayFine)
-				
+
 				// Staff/admin only
 				r.With(middleware.RequireRole("librarian", "administrator")).Post("/{fineId}/waive", libraryHandler.WaiveFine)
 			})
@@ -199,6 +212,7 @@ func main() {
 				r.Post("/upload", mediaHandler.Upload)
 				r.Get("/my-uploads", mediaHandler.MyUploads)
 				r.Patch("/{itemId}/metadata", mediaHandler.UpdateMetadata)
+				r.Delete("/{itemId}", mediaHandler.DeleteMedia)
 			})
 		})
 

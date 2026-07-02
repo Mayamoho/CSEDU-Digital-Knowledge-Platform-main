@@ -21,13 +21,13 @@ func NewMinio(ctx context.Context) (*MinioClient, error) {
 	if endpoint == "" {
 		endpoint = "minio:9000"
 	}
-	
+
 	// Check if SSL should be used (default to false for local, true for production)
 	useSSL := false
 	if sslEnv := os.Getenv("MINIO_USE_SSL"); sslEnv == "true" {
 		useSSL = true
 	}
-	
+
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(os.Getenv("MINIO_USER"), os.Getenv("MINIO_PASSWORD"), ""),
 		Secure: useSSL,
@@ -81,4 +81,9 @@ func (m *MinioClient) PresignedURL(ctx context.Context, objectKey string) (strin
 		return "", err
 	}
 	return u.String(), nil
+}
+
+// Delete removes an object from MinIO.
+func (m *MinioClient) Delete(ctx context.Context, objectKey string) error {
+	return m.client.RemoveObject(ctx, m.bucket, objectKey, minio.RemoveObjectOptions{})
 }
