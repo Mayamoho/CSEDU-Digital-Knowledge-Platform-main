@@ -120,12 +120,12 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
 
   return (
     <div className="container max-w-4xl px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <Button variant="ghost" onClick={() => router.back()}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <Button variant="ghost" onClick={() => router.back()} className="w-full sm:w-auto">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back
         </Button>
         {canEdit && (
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" onClick={() => setEditOpen(true)} className="w-full sm:w-auto">
             <Edit className="h-4 w-4 mr-2" /> Edit
           </Button>
         )}

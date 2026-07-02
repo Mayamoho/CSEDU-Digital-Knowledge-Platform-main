@@ -162,28 +162,28 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
 
   return (
     <div className="container px-4 py-8 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <Button variant="outline" onClick={() => router.back()}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <Button variant="outline" onClick={() => router.back()} className="w-full sm:w-auto">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Research
         </Button>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {canEdit && (
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
+            <Button variant="outline" onClick={() => setEditOpen(true)} className="w-full sm:w-auto">
               <Edit className="h-4 w-4 mr-2" /> Edit
             </Button>
           )}
           {canSubmitForReview && (
-            <Button onClick={handleSubmitForReview} disabled={isSaving}>
+            <Button onClick={handleSubmitForReview} disabled={isSaving} className="w-full sm:w-auto">
               <Send className="h-4 w-4 mr-2" /> Submit for Review
             </Button>
           )}
           {canPublish && (
-            <Button onClick={handlePublish} disabled={isSaving}>
+            <Button onClick={handlePublish} disabled={isSaving} className="w-full sm:w-auto">
               <BookOpen className="h-4 w-4 mr-2" /> Publish
             </Button>
           )}
           {canReview && (
-            <Button variant="outline" onClick={() => setReviewOpen(true)}>
+            <Button variant="outline" onClick={() => setReviewOpen(true)} className="w-full sm:w-auto">
               <CheckCircle className="h-4 w-4 mr-2" /> Review Paper
             </Button>
           )}

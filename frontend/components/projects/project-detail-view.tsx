@@ -93,12 +93,12 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
 
   return (
     <div className="container px-4 py-8 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" onClick={() => router.back()}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <Button variant="outline" onClick={() => router.back()} className="w-full sm:w-auto">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Projects
         </Button>
         {canEdit && (
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" onClick={() => setEditOpen(true)} className="w-full sm:w-auto">
             <Edit className="h-4 w-4 mr-2" /> Edit Project
           </Button>
         )}
