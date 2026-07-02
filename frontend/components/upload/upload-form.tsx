@@ -232,6 +232,22 @@ export function UploadForm({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Upload Guidelines */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          <div className="space-y-2">
+            <p className="font-medium">Upload Guidelines:</p>
+            <ul className="list-disc list-inside text-sm space-y-1 ml-2">
+              <li>Maximum file size: 50MB</li>
+              <li>Supported formats: {allowedFormats.join(', ').toUpperCase()}</li>
+              <li>Provide a clear title and description for better discoverability</li>
+              <li>Add relevant keywords to help others find your content</li>
+            </ul>
+          </div>
+        </AlertDescription>
+      </Alert>
+
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
