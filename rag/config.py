@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash-exp"
 
-    # Embedding Model
-    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Embedding Model (fastembed — ONNX, no torch needed)
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_dimension: int = 768
 
     # RAG Configuration

@@ -10,6 +10,4 @@ PyMuPDF==1.23.21
 python-multipart==0.0.6
 httpx==0.26.0
 redis==5.0.1
-sentence-transformers==2.2.2
-transformers==4.36.2
-huggingface_hub==0.19.4
+fastembed==0.4.2
