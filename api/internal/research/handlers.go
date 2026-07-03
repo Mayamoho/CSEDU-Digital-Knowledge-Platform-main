@@ -143,13 +143,19 @@ func (h *Handler) SubmitResearch(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed to update media item: %v", err)
 		}
 
-		// Update metadata
+		// Upsert metadata (insert or update)
 		_, err = tx.Exec(ctx,
-			`UPDATE media_metadata SET abstract = $1, keywords = $2 WHERE item_id = $3`,
-			req.Abstract, req.Keywords, itemID,
+			`INSERT INTO media_metadata (item_id, abstract, keywords, language)
+			 VALUES ($1, $2, $3, 'en')
+			 ON CONFLICT (item_id) DO UPDATE SET
+			   abstract = EXCLUDED.abstract,
+			   keywords = EXCLUDED.keywords`,
+			itemID, req.Abstract, req.Keywords,
 		)
 		if err != nil {
-			log.Printf("Failed to update metadata: %v", err)
+			log.Printf("Failed to upsert metadata: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to update research paper")
+			return
 		}
 	}
 
@@ -191,12 +197,12 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	// Special case: researchers can see papers pending review (excluding their own)
 	if forReview && roleTier == "researcher" {
 		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 		                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 		         FROM research_papers rp
 		         JOIN media_items m ON rp.item_id = m.item_id
-		         JOIN media_metadata mm ON m.item_id = mm.item_id
+		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 		         WHERE m.status = 'review' AND m.created_by != $1
 		         ORDER BY rp.submitted_at ASC`
 		args = append(args, userID)
@@ -204,46 +210,46 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 		// Can see all papers
 		if status != "" {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
-			         JOIN media_metadata mm ON m.item_id = mm.item_id
+			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 			         WHERE m.status = $1
 			         ORDER BY rp.submitted_at DESC`
 			args = append(args, status)
 		} else {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
-			         JOIN media_metadata mm ON m.item_id = mm.item_id
+			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 			         ORDER BY rp.submitted_at DESC`
 		}
 	} else if userID != "" {
 		// Authenticated non-researcher: see published + own papers
 		if status != "" {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
-			         JOIN media_metadata mm ON m.item_id = mm.item_id
+			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 			         WHERE (m.status = 'published' OR m.created_by = $1) AND m.status = $2
 			         ORDER BY rp.submitted_at DESC`
 			args = append(args, userID, status)
 		} else {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
-			         JOIN media_metadata mm ON m.item_id = mm.item_id
+			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 			         WHERE m.status = 'published' OR m.created_by = $1
 			         ORDER BY rp.submitted_at DESC`
 			args = append(args, userID)
@@ -251,12 +257,12 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Unauthenticated: only published papers
 		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 		                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 		         FROM research_papers rp
 		         JOIN media_items m ON rp.item_id = m.item_id
-		         JOIN media_metadata mm ON m.item_id = mm.item_id
+		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 		         WHERE m.status = 'published'
 		         ORDER BY rp.submitted_at DESC`
 	}
@@ -305,12 +311,12 @@ func (h *Handler) GetResearch(w http.ResponseWriter, r *http.Request) {
 	var p ResearchPaper
 	err := h.db.QueryRow(r.Context(),
 		`SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		        mm.abstract, mm.keywords, rp.publication_date, rp.doi, rp.journal, 
+		        COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
 		        rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
 		        rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
 		 FROM research_papers rp
 		 JOIN media_items m ON rp.item_id = m.item_id
-		 JOIN media_metadata mm ON m.item_id = mm.item_id
+		 LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
 		 WHERE rp.paper_id = $1`,
 		paperID,
 	).Scan(
