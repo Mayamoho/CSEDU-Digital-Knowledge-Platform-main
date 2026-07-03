@@ -105,9 +105,26 @@ class HybridRetriever:
             LIMIT %s
         """
         try:
-            return db.execute_query(q, (query, query, self.fts_limit)) or []
+            results = db.execute_query(q, (query, query, self.fts_limit)) or []
+            if not results:
+                fallback = """
+                    SELECT
+                        sp.item_id::text,
+                        mi.title,
+                        mi.item_type,
+                        mi.access_tier,
+                        'project' as source,
+                        coalesce(array_to_string(sp.team_members, ', '), '') || ' | Course: ' || coalesce(sp.course_code, 'N/A') || ' | Year: ' || sp.academic_year::text as chunk_text,
+                        0.0 as score
+                    FROM student_projects sp
+                    JOIN media_items mi ON sp.item_id = mi.item_id
+                    WHERE mi.status = 'published'
+                    ORDER BY mi.title LIMIT %s
+                """
+                results = db.execute_query(fallback, (self.fts_limit,)) or []
+            return results
         except Exception as e:
-            logger.error(f"Catalog search error: {e}")
+            logger.error(f"Projects search error: {e}")
             return []
 
     def _search_research(
@@ -166,9 +183,31 @@ class HybridRetriever:
             LIMIT %s
         """
         try:
-            return db.execute_query(q, (query, query, self.fts_limit)) or []
+            results = (
+                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
+            )
+            if not results:
+                fallback = """
+                    SELECT
+                        rp.item_id::text,
+                        mi.title,
+                        mi.item_type,
+                        mi.access_tier,
+                        'research' as source,
+                        coalesce(array_to_string(rp.authors, ', '), 'Unknown authors') || ' | ' || coalesce(mm.abstract, '') as chunk_text,
+                        0.0 as score
+                    FROM research_papers rp
+                    JOIN media_items mi ON rp.item_id = mi.item_id
+                    LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+                    WHERE mi.status = 'published' AND mi.access_tier = ANY(%s)
+                    ORDER BY mi.title LIMIT %s
+                """
+                results = (
+                    db.execute_query(fallback, (access_tiers, self.fts_limit)) or []
+                )
+            return results
         except Exception as e:
-            logger.error(f"Projects search error: {e}")
+            logger.error(f"Research search error: {e}")
             return []
 
     def _search_media(
@@ -196,9 +235,28 @@ class HybridRetriever:
             LIMIT %s
         """
         try:
-            return (
+            results = (
                 db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
             )
+            if not results:
+                fallback = """
+                    SELECT
+                        mi.item_id::text,
+                        mi.title,
+                        mi.item_type,
+                        mi.access_tier,
+                        'media' as source,
+                        coalesce(mm.abstract, '') || ' | Tags: ' || coalesce(array_to_string(mm.tags, ' '), 'N/A') as chunk_text,
+                        0.0 as score
+                    FROM media_items mi
+                    LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+                    WHERE mi.status = 'published' AND mi.access_tier = ANY(%s)
+                    ORDER BY mi.title LIMIT %s
+                """
+                results = (
+                    db.execute_query(fallback, (access_tiers, self.fts_limit)) or []
+                )
+            return results
         except Exception as e:
             logger.error(f"Media search error: {e}")
             return []
