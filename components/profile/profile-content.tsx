@@ -24,12 +24,12 @@ export function ProfileContent() {
       try {
         if (user?.role_tier === 'librarian') {
           // Librarians see books they've added instead of uploads
-          const [loansRes] = await Promise.all([
+          const [loansRes, booksRes] = await Promise.all([
             apiClient.getMyLoans(),
+            apiClient.getMyAddedBooks({ per_page: 100 }),
           ]);
           setLoans(loansRes.data);
-          // TODO: Add API endpoint to get books added by librarian
-          setAddedBooks([]);
+          setAddedBooks(booksRes.data);
         } else {
           const [uploadsRes, loansRes] = await Promise.all([
             apiClient.getMyUploads({ per_page: 100 }),
@@ -39,7 +39,7 @@ export function ProfileContent() {
           setLoans(loansRes.data);
         }
       } catch (error) {
-        console.error("Failed to load profile data:", error);
+        // Error loading profile data - fail silently
       } finally {
         setIsLoading(false);
       }
@@ -87,10 +87,10 @@ export function ProfileContent() {
                   Member since {new Date(user.created_at).toLocaleDateString()}
                 </div>
               </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <EditProfileDialog />
-              <ChangePasswordDialog />
+              <div className="mt-4 flex gap-2">
+                <EditProfileDialog />
+                <ChangePasswordDialog />
+              </div>
             </div>
           </div>
         </CardContent>

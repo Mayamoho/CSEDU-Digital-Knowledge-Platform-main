@@ -20,45 +20,59 @@ if [ -d "frontend/components/profile" ]; then
 fi
 
 echo ""
-echo "3. Killing processes blocking ports..."
-sudo fuser -k 6379/tcp 2>/dev/null || true
-sudo fuser -k 9000/tcp 2>/dev/null || true
-sudo fuser -k 9001/tcp 2>/dev/null || true
-
-echo ""
-echo "4. Stopping all containers..."
+echo "3. Stopping all containers..."
 docker compose down
 
 echo ""
-echo "5. Cleaning Docker cache..."
-docker builder prune -a -f
+echo "4. Killing any processes blocking ports..."
+sudo fuser -k 5432/tcp 2>/dev/null || true
+sudo fuser -k 6379/tcp 2>/dev/null || true
+sudo fuser -k 8080/tcp 2>/dev/null || true
+sudo fuser -k 8001/tcp 2>/dev/null || true
+sudo fuser -k 9000/tcp 2>/dev/null || true
+sudo fuser -k 9001/tcp 2>/dev/null || true
+sudo fuser -k 3000/tcp 2>/dev/null || true
+sudo fuser -k 80/tcp 2>/dev/null || true
 
 echo ""
-echo "6. Starting core services (postgres, redis, minio)..."
+echo "5. Cleaning up any orphaned containers..."
+docker ps -aq | xargs -r docker stop 2>/dev/null || true
+docker ps -aq | xargs -r docker rm 2>/dev/null || true
+
+echo ""
+echo "6. Cleaning Docker cache and old images..."
+docker builder prune -a -f
+docker image prune -a -f
+
+echo ""
+echo "7. Starting core services (postgres, redis, minio)..."
 docker compose up -d postgres redis minio
 
 echo ""
-echo "7. Waiting for database to be ready..."
+echo "8. Waiting for database to be ready..."
+sleep 20
+echo "   Checking postgres health..."
+docker compose exec -T postgres pg_isready -U csedu_user || echo "   Postgres still starting..."
+sleep 5
+
+echo ""
+echo "9. Starting backend services (api, rag, workers)..."
+docker compose up -d --build api rag ingestion-worker fine-worker
+
+echo ""
+echo "10. Waiting for backend to be ready..."
 sleep 15
 
 echo ""
-echo "8. Starting backend services (api, rag, workers)..."
-docker compose up -d api rag ingestion-worker fine-worker
-
-echo ""
-echo "9. Waiting for backend to be ready..."
-sleep 10
-
-echo ""
-echo "10. Building and starting frontend..."
+echo "11. Building and starting frontend..."
 docker compose up -d --build frontend
 
 echo ""
-echo "11. Starting nginx..."
+echo "12. Starting nginx..."
 docker compose up -d nginx
 
 echo ""
-echo "12. Waiting for all services to stabilize..."
+echo "13. Waiting for all services to stabilize..."
 sleep 10
 
 echo ""
