@@ -133,10 +133,34 @@ export function MyUploadsContent() {
       }
     };
 
-    const handleViewDetails = () => {
-      const baseUrl = item.item_type === 'research' ? '/research' : 
-                      item.item_type === 'project' ? '/projects' : '/archive';
-      window.location.href = `${baseUrl}/${item.item_id}`;
+    const handleViewDetails = async () => {
+      try {
+        if (item.item_type === 'research') {
+          // Fetch all research papers and find the one with matching item_id
+          const papers = await apiClient.listResearch({});
+          const paper = papers.data?.find((p: any) => p.item_id === item.item_id);
+          if (paper && paper.paper_id) {
+            window.location.href = `/research/${paper.paper_id}`;
+          } else {
+            toast.error("Research paper not found");
+          }
+        } else if (item.item_type === 'project') {
+          // Fetch all projects and find the one with matching item_id
+          const projects = await apiClient.listProjects({});
+          const project = projects.data?.find((p: any) => p.item_id === item.item_id);
+          if (project && project.project_id) {
+            window.location.href = `/projects/${project.project_id}`;
+          } else {
+            toast.error("Project not found");
+          }
+        } else {
+          // For archive items, use item_id directly
+          window.location.href = `/archive/${item.item_id}`;
+        }
+      } catch (error) {
+        console.error("Failed to navigate to details:", error);
+        toast.error("Failed to load details");
+      }
     };
 
     return (
