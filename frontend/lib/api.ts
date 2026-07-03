@@ -289,6 +289,11 @@ class APIClient {
     return this.request<PaginatedResponse<LibraryCatalogItem>>(`/library/catalog?${searchParams.toString()}`);
   }
 
+  // Alias for search page compatibility
+  async getCatalogItems(params: SearchParams = {}): Promise<PaginatedResponse<LibraryCatalogItem>> {
+    return this.getLibraryCatalog(params);
+  }
+
   async getLibraryItem(itemId: string): Promise<LibraryCatalogItem> {
     return this.request<LibraryCatalogItem>(`/library/catalog/${itemId}`);
   }
