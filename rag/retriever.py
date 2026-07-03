@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
-    """Searches across ALL platform resources: catalog, media, research, projects"""
+    """Searches across ALL platform resources: vector_embeddings + catalog_embeddings"""
 
     def __init__(self):
         self.vector_limit = settings.vector_search_limit
@@ -91,184 +91,47 @@ class HybridRetriever:
             return []
 
     def _search_catalog(self, query: str, language: str) -> List[Dict]:
+        """Search library catalog books"""
         fts = "english" if language == "en" else "simple"
         q = f"""
             SELECT
-                catalog_id::text as item_id,
-                title,
-                'library_catalog' as item_type,
+                lc.catalog_id::text as item_id,
+                lc.title,
+                'book' as item_type,
                 'public' as access_tier,
                 'catalog' as source,
-                coalesce(author, '') || ' | Location: ' || coalesce(location, '') || ' | ISBN: ' || coalesce(isbn, 'N/A') as chunk_text,
+                coalesce(lc.author, '') || ' | Location: ' || coalesce(lc.location, 'Main Library') || ' | ISBN: ' || coalesce(lc.isbn, 'N/A') || ' | Available: ' || lc.available_copies::text || '/' || lc.total_copies::text as chunk_text,
                 ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(author, '')),
+                    to_tsvector('{fts}', coalesce(lc.title, '') || ' ' || coalesce(lc.author, '')),
                     plainto_tsquery('{fts}', %s)
                 ) as score
-            FROM library_catalog
-            WHERE to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(author, '')) @@ plainto_tsquery('{fts}', %s)
+            FROM library_catalog lc
+            WHERE to_tsvector('{fts}', coalesce(lc.title, '') || ' ' || coalesce(lc.author, '')) @@ plainto_tsquery('{fts}', %s)
             ORDER BY score DESC
             LIMIT %s
         """
         try:
             results = db.execute_query(q, (query, query, self.fts_limit)) or []
+            # If no FTS matches, return all books (for queries like "list all books")
             if not results:
                 fallback = """
                     SELECT
-                        sp.item_id::text,
-                        mi.title,
-                        mi.item_type,
-                        mi.access_tier,
-                        'project' as source,
-                        coalesce(array_to_string(sp.team_members, ', '), '') || ' | Course: ' || coalesce(sp.course_code, 'N/A') || ' | Year: ' || sp.academic_year::text as chunk_text,
+                        lc.catalog_id::text as item_id,
+                        lc.title,
+                        'book' as item_type,
+                        'public' as access_tier,
+                        'catalog' as source,
+                        coalesce(lc.author, '') || ' | Location: ' || coalesce(lc.location, 'Main Library') || ' | ISBN: ' || coalesce(lc.isbn, 'N/A') || ' | Available: ' || lc.available_copies::text || '/' || lc.total_copies::text as chunk_text,
                         0.0 as score
-                    FROM student_projects sp
-                    JOIN media_items mi ON sp.item_id = mi.item_id
-                    WHERE mi.status = 'published'
-                    ORDER BY mi.title LIMIT %s
+                    FROM library_catalog lc
+                    ORDER BY lc.title
+                    LIMIT %s
                 """
                 results = db.execute_query(fallback, (self.fts_limit,)) or []
             return results
         except Exception as e:
-            logger.error(f"Projects search error: {e}")
+            logger.error(f"Catalog search error: {e}")
             return []
-
-    def _search_research(
-        self, query: str, access_tiers: List[str], language: str
-    ) -> List[Dict]:
-        fts = "english" if language == "en" else "simple"
-        q = f"""
-            SELECT
-                rp.item_id::text,
-                mi.title,
-                mi.item_type,
-                mi.access_tier,
-                'research' as source,
-                coalesce(array_to_string(rp.authors, ', '), 'Unknown authors') || ' | ' || coalesce(mm.abstract, '') || ' | Keywords: ' || coalesce(array_to_string(mm.tags, ', '), 'N/A') as chunk_text,
-                ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
-                    plainto_tsquery('{fts}', %s)
-                ) as score
-            FROM research_papers rp
-            JOIN media_items mi ON rp.item_id = mi.item_id
-            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
-            WHERE mi.status = 'published'
-              AND mi.access_tier = ANY(%s)
-              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
-            ORDER BY score DESC
-            LIMIT %s
-        """
-        try:
-            return (
-                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
-            )
-        except Exception as e:
-            logger.error(f"Research search error: {e}")
-            return []
-
-    def _search_projects(self, query: str, language: str) -> List[Dict]:
-        fts = "english" if language == "en" else "simple"
-        q = f"""
-            SELECT
-                sp.item_id::text,
-                mi.title,
-                mi.item_type,
-                mi.access_tier,
-                'project' as source,
-                coalesce(array_to_string(sp.team_members, ', '), '') || ' | Course: ' || coalesce(sp.course_code, 'N/A') || ' | Year: ' || sp.academic_year::text || ' | ' || coalesce(mm.abstract, '') as chunk_text,
-                ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
-                    plainto_tsquery('{fts}', %s)
-                ) as score
-            FROM student_projects sp
-            JOIN media_items mi ON sp.item_id = mi.item_id
-            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
-            WHERE mi.status = 'published'
-              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
-            ORDER BY score DESC
-            LIMIT %s
-        """
-        try:
-            results = (
-                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
-            )
-            if not results:
-                fallback = """
-                    SELECT
-                        rp.item_id::text,
-                        mi.title,
-                        mi.item_type,
-                        mi.access_tier,
-                        'research' as source,
-                        coalesce(array_to_string(rp.authors, ', '), 'Unknown authors') || ' | ' || coalesce(mm.abstract, '') as chunk_text,
-                        0.0 as score
-                    FROM research_papers rp
-                    JOIN media_items mi ON rp.item_id = mi.item_id
-                    LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
-                    WHERE mi.status = 'published' AND mi.access_tier = ANY(%s)
-                    ORDER BY mi.title LIMIT %s
-                """
-                results = (
-                    db.execute_query(fallback, (access_tiers, self.fts_limit)) or []
-                )
-            return results
-        except Exception as e:
-            logger.error(f"Research search error: {e}")
-            return []
-
-    def _search_media(
-        self, query: str, access_tiers: List[str], language: str
-    ) -> List[Dict]:
-        fts = "english" if language == "en" else "simple"
-        q = f"""
-            SELECT
-                mi.item_id::text,
-                mi.title,
-                mi.item_type,
-                mi.access_tier,
-                'media' as source,
-                coalesce(mm.abstract, '') || ' | Tags: ' || coalesce(array_to_string(mm.tags, ' '), 'N/A') as chunk_text,
-                ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
-                    plainto_tsquery('{fts}', %s)
-                ) as score
-            FROM media_items mi
-            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
-            WHERE mi.status = 'published'
-              AND mi.access_tier = ANY(%s)
-              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
-            ORDER BY score DESC
-            LIMIT %s
-        """
-        try:
-            results = (
-                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
-            )
-            if not results:
-                fallback = """
-                    SELECT
-                        mi.item_id::text,
-                        mi.title,
-                        mi.item_type,
-                        mi.access_tier,
-                        'media' as source,
-                        coalesce(mm.abstract, '') || ' | Tags: ' || coalesce(array_to_string(mm.tags, ' '), 'N/A') as chunk_text,
-                        0.0 as score
-                    FROM media_items mi
-                    LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
-                    WHERE mi.status = 'published' AND mi.access_tier = ANY(%s)
-                    ORDER BY mi.title LIMIT %s
-                """
-                results = (
-                    db.execute_query(fallback, (access_tiers, self.fts_limit)) or []
-                )
-            return results
-        except Exception as e:
-            logger.error(f"Media search error: {e}")
-            return []
-
-
-retriever = HybridRetriever()
-
 
     def _search_media_fulltext(
         self, query: str, access_tiers: List[str], language: str
