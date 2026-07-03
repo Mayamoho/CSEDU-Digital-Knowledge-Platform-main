@@ -44,6 +44,7 @@ CREATE TABLE media_items (
     access_tier access_tier NOT NULL DEFAULT 'public',
     created_by  UUID        REFERENCES users(user_id) ON DELETE SET NULL,
     file_path   TEXT,
+    external_url TEXT,  -- For YouTube videos, external links, etc.
     upload_date TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -51,7 +52,7 @@ ALTER TABLE media_items
     ADD CONSTRAINT chk_media_format CHECK (format IN (
         'pdf','video','image','audio','docx','doc',
         'pptx','ppt','xlsx','xls','mp4','mp3','jpg','jpeg','png','gif',
-        'zip','apk','project'
+        'zip','apk','project','url'
     ));
 
 ALTER TABLE media_items

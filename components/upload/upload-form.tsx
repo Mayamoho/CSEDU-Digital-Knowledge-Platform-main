@@ -105,6 +105,8 @@ export function UploadForm({
   const [accessTier, setAccessTier] = useState(defaultAccessTier);
   const [language, setLanguage] = useState("en");
   const [status, setStatus] = useState<"draft" | "review" | "published">("published");
+  const [externalURL, setExternalURL] = useState("");
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
@@ -169,9 +171,17 @@ export function UploadForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!uploadedFile) {
-      setError("Please select a file to upload");
-      return;
+    // For archives, either file or URL must be provided
+    if (itemType === 'archive') {
+      if (!uploadedFile && !externalURL.trim()) {
+        setError("Please either upload a file or provide an external URL");
+        return;
+      }
+    } else {
+      if (!uploadedFile) {
+        setError("Please select a file to upload");
+        return;
+      }
     }
     
     if (!titleState.trim()) {
@@ -179,12 +189,22 @@ export function UploadForm({
       return;
     }
     
+    // Validate URL if provided
+    if (externalURL.trim()) {
+      if (!externalURL.startsWith('http://') && !externalURL.startsWith('https://')) {
+        setError("URL must start with http:// or https://");
+        return;
+      }
+    }
+    
     setIsUploading(true);
     setUploadProgress(0);
     
     try {
       const formData = new FormData();
-      formData.append('file', uploadedFile.file);
+      if (uploadedFile) {
+        formData.append('file', uploadedFile.file);
+      }
       formData.append('title', titleState);
       formData.append('description', abstract);
       formData.append('keywords', keywords);
@@ -192,6 +212,9 @@ export function UploadForm({
       formData.append('language', language);
       formData.append('status', status);
       formData.append('item_type', itemType);
+      if (externalURL.trim()) {
+        formData.append('external_url', externalURL.trim());
+      }
 
       const result = await apiClient.uploadMedia(formData);
 
@@ -203,6 +226,7 @@ export function UploadForm({
 
       toast.success(statusMessage);
       removeFile();
+      setExternalURL("");
       
       // Redirect based on item type
       const redirectPath = itemType === 'archive' ? '/archive' 
@@ -247,52 +271,92 @@ export function UploadForm({
 
           {/* File Upload */}
           <div className="space-y-2">
-            <Label>Upload File</Label>
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-              }`}
-            >
-              <input {...getInputProps()} className="hidden" />
-              {uploadedFile ? (
-                <div className="space-y-4">
-                  {uploadedFile.preview && (
-                    <img
-                      src={uploadedFile.preview}
-                      alt="Preview"
-                      className="mx-auto h-32 w-32 object-cover rounded-lg"
-                    />
-                  )}
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{uploadedFile.file.name}</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {(uploadedFile.file.size / 1024 / 1024).toFixed(2)} MB
-                    </Badge>
+            <Label>Upload File {itemType === 'archive' && '(Optional for Archives)'}</Label>
+            {itemType === 'archive' && (
+              <div className="flex gap-2 mb-2">
+                <Button
+                  type="button"
+                  variant={uploadMode === 'file' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setUploadMode('file')}
+                >
+                  Upload File
+                </Button>
+                <Button
+                  type="button"
+                  variant={uploadMode === 'url' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setUploadMode('url')}
+                >
+                  External URL
+                </Button>
+              </div>
+            )}
+            
+            {uploadMode === 'file' && (
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                }`}
+              >
+                <input {...getInputProps()} className="hidden" />
+                {uploadedFile ? (
+                  <div className="space-y-4">
+                    {uploadedFile.preview && (
+                      <img
+                        src={uploadedFile.preview}
+                        alt="Preview"
+                        className="mx-auto h-32 w-32 object-cover rounded-lg"
+                      />
+                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{uploadedFile.file.name}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {(uploadedFile.file.size / 1024 / 1024).toFixed(2)} MB
+                      </Badge>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={removeFile}
+                      disabled={isUploading}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={removeFile}
-                    disabled={isUploading}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Drag and drop your file here, or click to select
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Maximum file size: 50MB
-                  </p>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Drag and drop your file here, or click to select
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Maximum file size: 50MB
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {uploadMode === 'url' && itemType === 'archive' && (
+              <div className="space-y-2">
+                <Label htmlFor="externalURL">External URL (YouTube, Vimeo, etc.)</Label>
+                <Input
+                  id="externalURL"
+                  value={externalURL}
+                  onChange={(e) => setExternalURL(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  disabled={isUploading}
+                  type="url"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Provide a link to a YouTube video, Vimeo, or any other external content
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Metadata */}
@@ -417,7 +481,7 @@ export function UploadForm({
           <Button 
             type="submit" 
             onClick={handleSubmit}
-            disabled={!uploadedFile || !titleState.trim() || isUploading}
+            disabled={(!uploadedFile && !externalURL.trim() && itemType === 'archive') || (!uploadedFile && itemType !== 'archive') || !titleState.trim() || isUploading}
             className="w-full"
           >
             {isUploading ? (
@@ -428,7 +492,7 @@ export function UploadForm({
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Upload File
+                {externalURL.trim() && uploadMode === 'url' ? 'Save External Link' : 'Upload File'}
               </>
             )}
           </Button>

@@ -43,17 +43,18 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 type mediaItemResponse struct {
-	ItemID     string  `json:"item_id"`
-	Title      string  `json:"title"`
-	ItemType   string  `json:"item_type"`
-	Format     string  `json:"format"`
-	Status     string  `json:"status"`
-	AccessTier string  `json:"access_tier"`
-	CreatedBy  *string `json:"created_by"`
-	FilePath   *string `json:"file_path"`
-	UploadDate string  `json:"upload_date"`
-	PaperID    *string `json:"paper_id,omitempty"`
-	ProjectID  *string `json:"project_id,omitempty"`
+	ItemID      string  `json:"item_id"`
+	Title       string  `json:"title"`
+	ItemType    string  `json:"item_type"`
+	Format      string  `json:"format"`
+	Status      string  `json:"status"`
+	AccessTier  string  `json:"access_tier"`
+	CreatedBy   *string `json:"created_by"`
+	FilePath    *string `json:"file_path"`
+	ExternalURL *string `json:"external_url,omitempty"`
+	UploadDate  string  `json:"upload_date"`
+	PaperID     *string `json:"paper_id,omitempty"`
+	ProjectID   *string `json:"project_id,omitempty"`
 }
 
 type mediaWithMeta struct {

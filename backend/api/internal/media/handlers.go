@@ -43,17 +43,18 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 type mediaItemResponse struct {
-	ItemID     string  `json:"item_id"`
-	Title      string  `json:"title"`
-	ItemType   string  `json:"item_type"`
-	Format     string  `json:"format"`
-	Status     string  `json:"status"`
-	AccessTier string  `json:"access_tier"`
-	CreatedBy  *string `json:"created_by"`
-	FilePath   *string `json:"file_path"`
-	UploadDate string  `json:"upload_date"`
-	PaperID    *string `json:"paper_id,omitempty"`
-	ProjectID  *string `json:"project_id,omitempty"`
+	ItemID      string  `json:"item_id"`
+	Title       string  `json:"title"`
+	ItemType    string  `json:"item_type"`
+	Format      string  `json:"format"`
+	Status      string  `json:"status"`
+	AccessTier  string  `json:"access_tier"`
+	CreatedBy   *string `json:"created_by"`
+	FilePath    *string `json:"file_path"`
+	ExternalURL *string `json:"external_url,omitempty"`
+	UploadDate  string  `json:"upload_date"`
+	PaperID     *string `json:"paper_id,omitempty"`
+	ProjectID   *string `json:"project_id,omitempty"`
 }
 
 type mediaWithMeta struct {
@@ -84,18 +85,6 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
-		return
-	}
-	defer file.Close()
-
-	if header.Size > maxUploadSize {
-		writeError(w, http.StatusBadRequest, "file exceeds 50 MB limit")
-		return
-	}
-
 	// Metadata from form fields
 	title := strings.TrimSpace(r.FormValue("title"))
 	abstract := r.FormValue("abstract")
@@ -104,6 +93,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	language := r.FormValue("language")
 	itemType := r.FormValue("item_type") // archive | research | project
 	status := r.FormValue("status")      // draft | review | published | archived
+	externalURL := strings.TrimSpace(r.FormValue("external_url"))
 
 	if title == "" {
 		writeError(w, http.StatusBadRequest, "title is required")
@@ -127,32 +117,65 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		language = "en"
 	}
 
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
-	allowedExts := map[string]bool{
-		"pdf": true, "docx": true, "doc": true, "pptx": true, "ppt": true,
-		"xlsx": true, "xls": true, "mp4": true, "mp3": true,
-		"jpg": true, "jpeg": true, "png": true, "gif": true,
-		"zip": true, "apk": true,
-	}
-	if !allowedExts[ext] {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unsupported file format: %s", ext))
-		return
-	}
-	// Normalise jpeg
-	if ext == "jpeg" {
-		ext = "jpg"
-	}
+	var storedKey string
+	var ext string
 
-	// Upload to MinIO
-	objectKey := fmt.Sprintf("uploads/%s/%s.%s", userID, uuid.New().String(), ext)
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	storedKey, err := h.minio.Upload(r.Context(), objectKey, contentType, file, header.Size)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "file storage failed")
-		return
+	// Check if this is an external URL submission (for archives)
+	if externalURL != "" {
+		// Validate URL
+		if !strings.HasPrefix(externalURL, "http://") && !strings.HasPrefix(externalURL, "https://") {
+			writeError(w, http.StatusBadRequest, "external URL must start with http:// or https://")
+			return
+		}
+		ext = "url"
+		storedKey = "" // No file path for external URLs
+	} else {
+		// File upload path
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			// For archives, file is optional if external_url is provided
+			if itemType == "archive" && externalURL != "" {
+				ext = "url"
+			} else {
+				writeError(w, http.StatusBadRequest, "file is required")
+				return
+			}
+		} else {
+			defer file.Close()
+
+			if header.Size > maxUploadSize {
+				writeError(w, http.StatusBadRequest, "file exceeds 50 MB limit")
+				return
+			}
+
+			ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+			allowedExts := map[string]bool{
+				"pdf": true, "docx": true, "doc": true, "pptx": true, "ppt": true,
+				"xlsx": true, "xls": true, "mp4": true, "mp3": true,
+				"jpg": true, "jpeg": true, "png": true, "gif": true,
+				"zip": true, "apk": true,
+			}
+			if !allowedExts[ext] {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("unsupported file format: %s", ext))
+				return
+			}
+			// Normalise jpeg
+			if ext == "jpeg" {
+				ext = "jpg"
+			}
+
+			// Upload to MinIO
+			objectKey := fmt.Sprintf("uploads/%s/%s.%s", userID, uuid.New().String(), ext)
+			contentType := header.Header.Get("Content-Type")
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+			storedKey, err = h.minio.Upload(r.Context(), objectKey, contentType, file, header.Size)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "file storage failed")
+				return
+			}
+		}
 	}
 
 	// Insert media_item + media_metadata in a transaction
@@ -164,11 +187,21 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	var itemID, uploadDate string
+	var filePathPtr *string
+	var externalURLPtr *string
+	
+	if storedKey != "" {
+		filePathPtr = &storedKey
+	}
+	if externalURL != "" {
+		externalURLPtr = &externalURL
+	}
+
 	if err := tx.QueryRow(r.Context(),
-		`INSERT INTO media_items (title, item_type, format, status, access_tier, created_by, file_path)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO media_items (title, item_type, format, status, access_tier, created_by, file_path, external_url)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING item_id, to_char(upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		title, itemType, ext, status, accessTier, userID, storedKey,
+		title, itemType, ext, status, accessTier, userID, filePathPtr, externalURLPtr,
 	).Scan(&itemID, &uploadDate); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not save media item")
 		return
@@ -215,15 +248,16 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, mediaItemResponse{
-		ItemID:     itemID,
-		Title:      title,
-		ItemType:   itemType,
-		Format:     ext,
-		Status:     status,
-		AccessTier: accessTier,
-		CreatedBy:  &userID,
-		FilePath:   &storedKey,
-		UploadDate: uploadDate,
+		ItemID:      itemID,
+		Title:       title,
+		ItemType:    itemType,
+		Format:      ext,
+		Status:      status,
+		AccessTier:  accessTier,
+		CreatedBy:   &userID,
+		FilePath:    filePathPtr,
+		ExternalURL: externalURLPtr,
+		UploadDate:  uploadDate,
 	})
 }
 
@@ -286,7 +320,7 @@ func (h *Handler) ListMedia(w http.ResponseWriter, r *http.Request) {
 	args = append(args, perPage, offset)
 	rows, err := h.db.Query(r.Context(),
 		`SELECT m.item_id, m.title, m.item_type, m.format, m.status,
-		        m.access_tier, m.created_by, m.file_path,
+		        m.access_tier, m.created_by, m.file_path, m.external_url,
 		        to_char(m.upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		 FROM media_items m
 		 WHERE `+whereClause+`
@@ -303,7 +337,7 @@ func (h *Handler) ListMedia(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it mediaItemResponse
 		if err := rows.Scan(&it.ItemID, &it.Title, &it.ItemType, &it.Format,
-			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate); err != nil {
+			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.ExternalURL, &it.UploadDate); err != nil {
 			continue
 		}
 		items = append(items, it)
@@ -329,14 +363,14 @@ func (h *Handler) GetMedia(w http.ResponseWriter, r *http.Request) {
 
 	err := h.db.QueryRow(r.Context(),
 		`SELECT m.item_id, m.title, m.item_type, m.format, m.status,
-		        m.access_tier, m.created_by, m.file_path,
+		        m.access_tier, m.created_by, m.file_path, m.external_url,
 		        to_char(m.upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		        mm.meta_id, mm.abstract, mm.tags, mm.keywords, mm.language
 		 FROM media_items m
 		 LEFT JOIN media_metadata mm ON mm.item_id = m.item_id
 		 WHERE m.item_id = $1`, id,
 	).Scan(&it.ItemID, &it.Title, &it.ItemType, &it.Format, &it.Status,
-		&it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate,
+		&it.AccessTier, &it.CreatedBy, &it.FilePath, &it.ExternalURL, &it.UploadDate,
 		&metaID, &abstract, &tags, &keywords, &language)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "item not found")
@@ -515,7 +549,7 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT m.item_id, m.title, m.item_type, m.format, m.status, m.access_tier,
-		        m.created_by, m.file_path,
+		        m.created_by, m.file_path, m.external_url,
 		        to_char(m.upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		        rp.paper_id, sp.project_id
 		 FROM media_items m
@@ -534,7 +568,7 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it mediaItemResponse
 		if err := rows.Scan(&it.ItemID, &it.Title, &it.ItemType, &it.Format,
-			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate,
+			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.ExternalURL, &it.UploadDate,
 			&it.PaperID, &it.ProjectID); err != nil {
 			continue
 		}
