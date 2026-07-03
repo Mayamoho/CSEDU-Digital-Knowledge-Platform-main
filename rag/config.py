@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Embedding Model (fastembed — ONNX, no torch needed)
     embedding_model: str = "BAAI/bge-base-en-v1.5"
-    embedding_dimension: int = 768
+    embedding_dimension: int = 384
 
     # RAG Configuration
     chunk_size: int = 512
