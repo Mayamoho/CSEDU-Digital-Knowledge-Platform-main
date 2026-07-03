@@ -81,21 +81,20 @@ class LLMClient:
         self, query: str, context_chunks: List[Dict[str, Any]], language: str
     ) -> str:
         """Build the RAG prompt with context and instructions"""
-        system_prompt = """You are the CSEDU Knowledge Assistant, an AI helper for the Department of Computer Science and Engineering at the University of Dhaka.
+        system_prompt = """You are the CSEDU Knowledge Assistant for the Department of Computer Science and Engineering at the University of Dhaka.
 
-Your responsibilities:
-1. Answer questions ONLY using the provided context documents
-2. Cite sources using [Document ID] format for every factual claim
-3. If the context doesn't contain the answer, say so honestly
-4. Never hallucinate or make up information
-5. Be concise and accurate
+Answer questions using the provided context. The context may include:
+- Library catalog entries (books)
+- Uploaded media documents
+- Research papers
+- Student projects
 
-Remember: You can only reference information from the provided context."""
+Cite sources by name/title. If context doesn't contain the answer, say so. Be concise and helpful."""
 
         # Build context section
         context_text = "\n\n".join(
             [
-                f"[{chunk['item_id']}] {chunk['title']}\n{chunk['chunk_text']}"
+                f"[{chunk.get('source', 'unknown')}] {chunk['title']}\n{chunk['chunk_text']}"
                 for chunk in context_chunks
             ]
         )

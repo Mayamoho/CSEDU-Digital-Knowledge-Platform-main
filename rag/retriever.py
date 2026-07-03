@@ -1,14 +1,15 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from database import db
 from embedder import embedder
 from config import settings
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
-    """Implements hybrid retrieval: vector similarity + full-text search"""
+    """Searches across ALL platform resources: catalog, media, research, projects"""
 
     def __init__(self):
         self.vector_limit = settings.vector_search_limit
@@ -16,66 +17,67 @@ class HybridRetriever:
         self.top_k = settings.top_k_results
 
     def retrieve(
-        self,
-        query: str,
-        user_role: str,
-        language: str = "en"
+        self, query: str, user_role: str, language: str = "en"
     ) -> List[Dict[str, Any]]:
-        """
-        Perform hybrid retrieval with access control
-        
-        Args:
-            query: User's search query
-            user_role: User's role tier for access control
-            language: Query language (en/bn)
-            
-        Returns:
-            List of relevant document chunks with metadata
-        """
-        # Map role to accessible tiers
         access_tiers = self._get_access_tiers(user_role)
-        
-        # Generate query embedding
         query_embedding = embedder.embed_text(query)
-        
-        # Perform vector search
-        vector_results = self._vector_search(query_embedding, access_tiers)
-        
-        # Perform full-text search
-        fts_results = self._fulltext_search(query, access_tiers, language)
-        
-        # Merge and rank results using Reciprocal Rank Fusion
-        merged_results = self._reciprocal_rank_fusion(vector_results, fts_results)
-        
-        return merged_results[:self.top_k]
+
+        results = []
+
+        # 1. Vector search (chunked documents)
+        results.extend(self._vector_search(query_embedding, access_tiers))
+
+        # 2. Library catalog FTS
+        results.extend(self._search_catalog(query, language))
+
+        # 3. Research papers FTS
+        results.extend(self._search_research(query, access_tiers, language))
+
+        # 4. Student projects FTS
+        results.extend(self._search_projects(query, language))
+
+        # 5. Media items FTS
+        results.extend(self._search_media(query, access_tiers, language))
+
+        # Deduplicate by title and return top results
+        seen_titles = set()
+        unique = []
+        for r in results:
+            key = r.get("title", "").lower().strip()
+            if key and key not in seen_titles:
+                seen_titles.add(key)
+                unique.append(r)
+
+        return unique[: self.top_k]
 
     def _get_access_tiers(self, role: str) -> List[str]:
-        """Map user role to accessible content tiers"""
         role_mapping = {
             "public": ["public"],
             "student": ["public", "student"],
             "researcher": ["public", "student", "researcher"],
             "librarian": ["public", "student", "researcher", "librarian"],
-            "administrator": ["public", "student", "researcher", "librarian", "restricted"],
+            "administrator": [
+                "public",
+                "student",
+                "researcher",
+                "librarian",
+                "restricted",
+            ],
         }
         return role_mapping.get(role, ["public"])
 
-    def _vector_search(
-        self,
-        query_embedding: List[float],
-        access_tiers: List[str]
-    ) -> List[Dict[str, Any]]:
-        """Perform vector similarity search using pgvector"""
+    def _vector_search(self, query_embedding, access_tiers) -> List[Dict]:
         query = """
-            SELECT 
+            SELECT
                 ve.embedding_id,
-                ve.item_id,
+                ve.item_id::text,
                 ve.chunk_index,
                 ve.chunk_text,
                 mi.title,
                 mi.item_type,
                 mi.access_tier,
-                1 - (ve.embedding <=> %s::vector) AS similarity_score
+                'vector' as source,
+                1 - (ve.embedding <=> %s::vector) AS score
             FROM vector_embeddings ve
             JOIN media_items mi ON ve.item_id = mi.item_id
             WHERE mi.access_tier = ANY(%s)
@@ -83,112 +85,128 @@ class HybridRetriever:
             ORDER BY ve.embedding <=> %s::vector
             LIMIT %s
         """
-        
         try:
-            results = db.execute_query(
-                query,
-                (query_embedding, access_tiers, query_embedding, self.vector_limit)
+            return (
+                db.execute_query(
+                    query,
+                    (query_embedding, access_tiers, query_embedding, self.vector_limit),
+                )
+                or []
             )
-            return results or []
         except Exception as e:
             logger.error(f"Vector search error: {e}")
             return []
 
-    def _fulltext_search(
-        self,
-        query: str,
-        access_tiers: List[str],
-        language: str
-    ) -> List[Dict[str, Any]]:
-        """Perform PostgreSQL full-text search"""
-        # Choose FTS configuration based on language
-        fts_config = "english" if language == "en" else "simple"
-        
-        query_sql = f"""
-            SELECT 
-                ve.embedding_id,
-                ve.item_id,
-                ve.chunk_index,
-                ve.chunk_text,
+    def _search_catalog(self, query: str, language: str) -> List[Dict]:
+        fts = "english" if language == "en" else "simple"
+        q = f"""
+            SELECT
+                catalog_id::text as item_id,
+                title,
+                'library_catalog' as item_type,
+                'public' as access_tier,
+                'catalog' as source,
+                coalesce(author, '') || ' | ' || coalesce(location, '') || ' | ISBN: ' || coalesce(isbn, 'N/A') as chunk_text,
+                ts_rank_cd(
+                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(author, '')),
+                    plainto_tsquery('{fts}', %s)
+                ) as score
+            FROM library_catalog
+            WHERE to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(author, '')) @@ plainto_tsquery('{fts}', %s)
+            ORDER BY score DESC
+            LIMIT %s
+        """
+        try:
+            return db.execute_query(q, (query, query, self.fts_limit)) or []
+        except Exception as e:
+            logger.error(f"Catalog search error: {e}")
+            return []
+
+    def _search_research(
+        self, query: str, access_tiers: List[str], language: str
+    ) -> List[Dict]:
+        fts = "english" if language == "en" else "simple"
+        q = f"""
+            SELECT
+                paper_id::text as item_id,
+                title,
+                'research' as item_type,
+                access_tier,
+                'research' as source,
+                coalesce(authors::text, '') || ' | ' || coalesce(abstract, '') as chunk_text,
+                ts_rank_cd(
+                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(abstract, '') || ' ' || coalesce(array_to_string(keywords, ' '), '')),
+                    plainto_tsquery('{fts}', %s)
+                ) as score
+            FROM research_papers
+            WHERE status = 'published'
+              AND to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(abstract, '') || ' ' || coalesce(array_to_string(keywords, ' '), '')) @@ plainto_tsquery('{fts}', %s)
+            ORDER BY score DESC
+            LIMIT %s
+        """
+        try:
+            return db.execute_query(q, (query, query, self.fts_limit)) or []
+        except Exception as e:
+            logger.error(f"Research search error: {e}")
+            return []
+
+    def _search_projects(self, query: str, language: str) -> List[Dict]:
+        fts = "english" if language == "en" else "simple"
+        q = f"""
+            SELECT
+                project_id::text as item_id,
+                title,
+                'project' as item_type,
+                'student' as access_tier,
+                'project' as source,
+                coalesce(description, '') || ' | ' || coalesce(array_to_string(tech_stack, ' '), '') as chunk_text,
+                ts_rank_cd(
+                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(tech_stack, ' '), '')),
+                    plainto_tsquery('{fts}', %s)
+                ) as score
+            FROM student_projects
+            WHERE status = 'approved'
+              AND to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(tech_stack, ' '), '')) @@ plainto_tsquery('{fts}', %s)
+            ORDER BY score DESC
+            LIMIT %s
+        """
+        try:
+            return db.execute_query(q, (query, query, self.fts_limit)) or []
+        except Exception as e:
+            logger.error(f"Projects search error: {e}")
+            return []
+
+    def _search_media(
+        self, query: str, access_tiers: List[str], language: str
+    ) -> List[Dict]:
+        fts = "english" if language == "en" else "simple"
+        q = f"""
+            SELECT
+                mi.item_id::text,
                 mi.title,
                 mi.item_type,
                 mi.access_tier,
+                'media' as source,
+                coalesce(mm.abstract, '') || ' | ' || coalesce(array_to_string(mm.tags, ' '), '') as chunk_text,
                 ts_rank_cd(
-                    to_tsvector('{fts_config}', ve.chunk_text),
-                    plainto_tsquery('{fts_config}', %s)
-                ) AS fts_score
-            FROM vector_embeddings ve
-            JOIN media_items mi ON ve.item_id = mi.item_id
-            WHERE mi.access_tier = ANY(%s)
-              AND mi.status = 'published'
-              AND to_tsvector('{fts_config}', ve.chunk_text) @@ plainto_tsquery('{fts_config}', %s)
-            ORDER BY fts_score DESC
+                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
+                    plainto_tsquery('{fts}', %s)
+                ) as score
+            FROM media_items mi
+            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+            WHERE mi.status = 'published'
+              AND mi.access_tier = ANY(%s)
+              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
+            ORDER BY score DESC
             LIMIT %s
         """
-        
         try:
-            results = db.execute_query(
-                query_sql,
-                (query, access_tiers, query, self.fts_limit)
+            return (
+                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
             )
-            return results or []
         except Exception as e:
-            logger.error(f"Full-text search error: {e}")
+            logger.error(f"Media search error: {e}")
             return []
 
-    def _reciprocal_rank_fusion(
-        self,
-        vector_results: List[Dict],
-        fts_results: List[Dict]
-    ) -> List[Dict[str, Any]]:
-        """
-        Merge results using Reciprocal Rank Fusion (RRF)
-        
-        RRF formula: score = sum(1 / (k + rank_i))
-        where k=60 is a constant, rank_i is the rank in each list
-        """
-        k = 60
-        scores = {}
-        
-        # Score vector results
-        for rank, result in enumerate(vector_results, start=1):
-            chunk_id = result['embedding_id']
-            scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
-            if chunk_id not in scores:
-                scores[chunk_id] = {'result': result, 'score': 0}
-        
-        # Score FTS results
-        for rank, result in enumerate(fts_results, start=1):
-            chunk_id = result['embedding_id']
-            if chunk_id not in scores:
-                scores[chunk_id] = {'result': result, 'score': 0}
-            scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
-        
-        # Combine and sort by RRF score
-        merged = []
-        seen_chunks = set()
-        
-        # Add vector results first (preserve some ordering)
-        for result in vector_results:
-            chunk_id = result['embedding_id']
-            if chunk_id not in seen_chunks:
-                result['rrf_score'] = scores.get(chunk_id, 0)
-                merged.append(result)
-                seen_chunks.add(chunk_id)
-        
-        # Add FTS results that weren't in vector results
-        for result in fts_results:
-            chunk_id = result['embedding_id']
-            if chunk_id not in seen_chunks:
-                result['rrf_score'] = scores.get(chunk_id, 0)
-                merged.append(result)
-                seen_chunks.add(chunk_id)
-        
-        # Sort by RRF score
-        merged.sort(key=lambda x: x.get('rrf_score', 0), reverse=True)
-        
-        return merged
 
-
-# Global retriever instance
 retriever = HybridRetriever()
