@@ -22,11 +22,12 @@ class HybridRetriever:
         query_embedding = embedder.embed_text(query)
 
         results = []
+        # Vector search (media_items: research/projects/archives)
         results.extend(self._vector_search(query_embedding, access_tiers))
+        # Catalog search (library books)
         results.extend(self._search_catalog(query, language))
-        results.extend(self._search_research(query, access_tiers, language))
-        results.extend(self._search_projects(query, language))
-        results.extend(self._search_media(query, access_tiers, language))
+        # Full-text search on media_items
+        results.extend(self._search_media_fulltext(query, access_tiers, language))
 
         seen_titles = set()
         unique = []
@@ -263,6 +264,41 @@ class HybridRetriever:
             return results
         except Exception as e:
             logger.error(f"Media search error: {e}")
+            return []
+
+
+retriever = HybridRetriever()
+
+
+    def _search_media_fulltext(
+        self, query: str, access_tiers: List[str], language: str
+    ) -> List[Dict]:
+        """Full-text search across all media items"""
+        fts = "english" if language == "en" else "simple"
+        q = f"""
+            SELECT DISTINCT
+                mi.item_id::text,
+                mi.title,
+                mi.item_type,
+                mi.access_tier,
+                'fulltext' as source,
+                coalesce(mm.abstract, '') || ' | Tags: ' || coalesce(array_to_string(mm.tags, ', '), 'N/A') as chunk_text,
+                ts_rank_cd(
+                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '')),
+                    plainto_tsquery('{fts}', %s)
+                ) as score
+            FROM media_items mi
+            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+            WHERE mi.status = 'published'
+              AND mi.access_tier = ANY(%s)
+              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '')) @@ plainto_tsquery('{fts}', %s)
+            ORDER BY score DESC
+            LIMIT %s
+        """
+        try:
+            return db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
+        except Exception as e:
+            logger.error(f"Media fulltext search error: {e}")
             return []
 
 
