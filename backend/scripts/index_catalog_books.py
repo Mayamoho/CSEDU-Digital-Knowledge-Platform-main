@@ -11,14 +11,14 @@ from psycopg.rows import dict_row
 import requests
 from typing import List, Dict
 
-# Database connection
-DB_HOST = os.getenv("DB_HOST", "localhost")
+# Database connection (use Docker service names when running inside container)
+DB_HOST = os.getenv("DB_HOST", "postgres")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "csedu_platform")
 DB_USER = os.getenv("DB_USER", "csedu_user")
 DB_PASS = os.getenv("DB_PASSWORD", "csedu_secure_password")
 
-# RAG service
+# RAG service (localhost since running inside the RAG container)
 RAG_URL = os.getenv("RAG_URL", "http://localhost:8001")
 
 

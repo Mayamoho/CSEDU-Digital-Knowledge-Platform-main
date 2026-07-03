@@ -31,11 +31,15 @@ This script will:
 
 STEP 4: Index library catalog books for RAG
 --------------------------------------------
-After services are running, index the catalog books:
+After services are running, index the catalog books.
+This runs INSIDE the RAG container and connects to other services via Docker network:
 
-docker compose exec rag python /app/scripts/index_catalog_books.py
+docker compose exec rag python scripts/index_catalog_books.py
 
 This creates embeddings for all library books so the RAG assistant can search them.
+The script automatically connects to:
+- Database: postgres:5432 (Docker service name)
+- RAG API: localhost:8001 (same container)
 
 STEP 5: Verify deployment
 --------------------------
@@ -92,7 +96,10 @@ IMPORTANT: RAG INDEXING
 The RAG assistant now retrieves from ALL resources, but library catalog
 books need to be indexed first. After deployment, run:
 
-  docker compose exec rag python /app/scripts/index_catalog_books.py
+  docker compose exec rag python scripts/index_catalog_books.py
+
+This runs inside the RAG container and automatically connects to the
+database via Docker networking (postgres:5432).
 
 This only needs to be run once (or when new books are added to catalog).
 
