@@ -52,6 +52,8 @@ type mediaItemResponse struct {
 	CreatedBy  *string `json:"created_by"`
 	FilePath   *string `json:"file_path"`
 	UploadDate string  `json:"upload_date"`
+	PaperID    *string `json:"paper_id,omitempty"`
+	ProjectID  *string `json:"project_id,omitempty"`
 }
 
 type mediaWithMeta struct {
@@ -512,12 +514,15 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 		`SELECT COUNT(*) FROM media_items WHERE created_by = $1`, userID).Scan(&total)
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT item_id, title, item_type, format, status, access_tier,
-		        created_by, file_path,
-		        to_char(upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-		 FROM media_items
-		 WHERE created_by = $1
-		 ORDER BY upload_date DESC
+		`SELECT m.item_id, m.title, m.item_type, m.format, m.status, m.access_tier,
+		        m.created_by, m.file_path,
+		        to_char(m.upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        rp.paper_id, sp.project_id
+		 FROM media_items m
+		 LEFT JOIN research_papers rp ON m.item_id = rp.item_id
+		 LEFT JOIN student_projects sp ON m.item_id = sp.item_id
+		 WHERE m.created_by = $1
+		 ORDER BY m.upload_date DESC
 		 LIMIT $2 OFFSET $3`, userID, perPage, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -529,7 +534,8 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it mediaItemResponse
 		if err := rows.Scan(&it.ItemID, &it.Title, &it.ItemType, &it.Format,
-			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate); err != nil {
+			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate,
+			&it.PaperID, &it.ProjectID); err != nil {
 			continue
 		}
 		items = append(items, it)

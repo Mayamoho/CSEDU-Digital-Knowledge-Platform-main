@@ -9,8 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { User, Mail, Calendar, Shield, BookOpen, FileText, FolderOpen, Clock } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
-import { EditProfileDialog } from "./edit-profile-dialog";
-import { ChangePasswordDialog } from "./change-password-dialog";
 
 export function ProfileContent() {
   const { user } = useAuth();
@@ -86,10 +84,6 @@ export function ProfileContent() {
                   <Calendar className="h-4 w-4" />
                   Member since {new Date(user.created_at).toLocaleDateString()}
                 </div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <EditProfileDialog />
-                <ChangePasswordDialog />
               </div>
             </div>
           </div>

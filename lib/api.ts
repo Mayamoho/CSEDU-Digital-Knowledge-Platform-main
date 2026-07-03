@@ -50,6 +50,8 @@ export interface MediaItem {
   created_by: string;
   upload_date: string;
   file_path: string | null;
+  paper_id?: string;
+  project_id?: string;
   metadata?: MediaMetadata;
 }
 
