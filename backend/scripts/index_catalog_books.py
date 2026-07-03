@@ -6,7 +6,8 @@ Creates synthetic documents from book metadata for RAG retrieval
 
 import os
 import sys
-import psycopg2
+import psycopg
+from psycopg.rows import dict_row
 import requests
 from typing import List, Dict
 
@@ -23,13 +24,8 @@ RAG_URL = os.getenv("RAG_URL", "http://localhost:8001")
 
 def get_catalog_books() -> List[Dict]:
     """Fetch all books from library catalog"""
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS
-    )
+    conn_string = f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USER} password={DB_PASS}"
+    conn = psycopg.connect(conn_string, row_factory=dict_row)
     
     cursor = conn.cursor()
     cursor.execute("""
@@ -42,15 +38,15 @@ def get_catalog_books() -> List[Dict]:
     books = []
     for row in cursor.fetchall():
         books.append({
-            "catalog_id": str(row[0]),
-            "title": row[1],
-            "author": row[2],
-            "isbn": row[3] or "",
-            "format": row[4],
-            "location": row[5] or "Main Library",
-            "year": row[6],
-            "total_copies": row[7],
-            "available_copies": row[8]
+            "catalog_id": str(row["catalog_id"]),
+            "title": row["title"],
+            "author": row["author"],
+            "isbn": row["isbn"] or "",
+            "format": row["format"],
+            "location": row["location"] or "Main Library",
+            "year": row["year"],
+            "total_copies": row["total_copies"],
+            "available_copies": row["available_copies"]
         })
     
     cursor.close()
@@ -97,13 +93,8 @@ def get_embedding(text: str) -> List[float]:
 
 def create_catalog_embedding_table():
     """Create table for catalog book embeddings if it doesn't exist"""
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS
-    )
+    conn_string = f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USER} password={DB_PASS}"
+    conn = psycopg.connect(conn_string)
     
     cursor = conn.cursor()
     
@@ -153,13 +144,8 @@ def index_books():
         return
     
     # Index each book
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS
-    )
+    conn_string = f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USER} password={DB_PASS}"
+    conn = psycopg.connect(conn_string)
     cursor = conn.cursor()
     
     indexed = 0

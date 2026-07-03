@@ -29,7 +29,15 @@ This script will:
 - Start services in order: postgres → redis → minio → api → rag → workers → frontend → nginx
 - Check service health
 
-STEP 4: Verify deployment
+STEP 4: Index library catalog books for RAG
+--------------------------------------------
+After services are running, index the catalog books:
+
+docker compose exec rag python /app/scripts/index_catalog_books.py
+
+This creates embeddings for all library books so the RAG assistant can search them.
+
+STEP 5: Verify deployment
 --------------------------
 After the script completes, check:
 
@@ -37,7 +45,7 @@ Frontend: http://20.195.127.226:3000
 API: http://20.195.127.226:8080/health
 RAG: http://20.195.127.226:8001/health
 
-STEP 5: Check logs if needed
+STEP 6: Check logs if needed
 -----------------------------
 docker compose logs -f frontend
 docker compose logs -f api
@@ -57,6 +65,11 @@ WHAT WAS FIXED
    - Confidence scoring
    - Suggested follow-up questions (bilingual)
    - Conversation history support
+6. **RAG NOW SEARCHES ALL 4 RESOURCE TYPES:**
+   - ✓ Library Catalog (books)
+   - ✓ Research Papers
+   - ✓ Projects
+   - ✓ Archives
 
 ====================================
 NEW FEATURES AVAILABLE
@@ -64,8 +77,23 @@ NEW FEATURES AVAILABLE
 
 1. Edit Profile: Click "Edit Profile" button on profile page
 2. Change Password: Click "Change Password" button on profile page
-3. Interactive CSEDU Assistant: Enhanced with intent detection and follow-up suggestions
+3. **Comprehensive CSEDU Assistant:** Now searches across:
+   - Library catalog books (title, author, ISBN, availability)
+   - Research papers (full text)
+   - Student projects (full text)
+   - Archives (full text)
 4. Search: Full-text search across catalog (fixed TypeScript errors)
 5. Email notifications: Infrastructure ready (disabled by default)
+
+====================================
+IMPORTANT: RAG INDEXING
+====================================
+
+The RAG assistant now retrieves from ALL resources, but library catalog
+books need to be indexed first. After deployment, run:
+
+  docker compose exec rag python /app/scripts/index_catalog_books.py
+
+This only needs to be run once (or when new books are added to catalog).
 
 ====================================
