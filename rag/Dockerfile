@@ -2,24 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
 COPY requirements.txt .
+
+# Install CPU-only torch first (saves ~1.5GB vs CUDA version)
+RUN pip install --no-cache-dir torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining deps (torch already satisfied, skips download)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download and cache the embedding model at build time
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
-
-# Copy application code
 COPY . .
 
-# Expose port
 EXPOSE 8001
 
-# Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
