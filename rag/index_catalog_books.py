@@ -2,14 +2,17 @@
 """
 Index library catalog books into vector store
 Creates synthetic documents from book metadata for RAG retrieval
+Uses embedder module directly instead of HTTP API
 """
 
 import os
 import sys
 import psycopg
 from psycopg.rows import dict_row
-import requests
 from typing import List, Dict
+
+# Import embedder directly
+from embedder import embedder
 
 # Database connection (use Docker service names when running inside container)
 DB_HOST = os.getenv("DB_HOST", "postgres")
@@ -17,9 +20,6 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "csedu_platform")
 DB_USER = os.getenv("DB_USER", "csedu_user")
 DB_PASS = os.getenv("DB_PASSWORD", "csedu_secure_password")
-
-# RAG service (localhost since running inside the RAG container)
-RAG_URL = os.getenv("RAG_URL", "http://localhost:8001")
 
 
 def get_catalog_books() -> List[Dict]:
@@ -74,21 +74,6 @@ Availability: {book['available_copies']} of {book['total_copies']} copies availa
 This is a library book available for borrowing. You can check out this book from the library catalog.
 """
     return doc
-
-
-def get_embedding(text: str) -> List[float]:
-    """Get embedding from RAG service"""
-    try:
-        response = requests.post(
-            f"{RAG_URL}/embed",
-            json={"text": text},
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.json()["embedding"]
-    except Exception as e:
-        print(f"Error getting embedding: {e}")
-        return None
 
 
 def create_catalog_embedding_table():
@@ -157,15 +142,15 @@ def index_books():
         # Create document
         doc_text = create_book_document(book)
         
-        # Get embedding
-        embedding = get_embedding(doc_text)
-        
-        if embedding is None:
-            print(f"  ✗ Failed to get embedding")
-            failed += 1
-            continue
-        
+        # Get embedding using local embedder
         try:
+            embedding = embedder.embed_text(doc_text)
+            
+            if embedding is None:
+                print(f"  ✗ Failed to get embedding")
+                failed += 1
+                continue
+            
             # Upsert embedding
             cursor.execute("""
                 INSERT INTO catalog_embeddings (catalog_id, chunk_text, embedding, updated_at)
@@ -182,7 +167,7 @@ def index_books():
             indexed += 1
             
         except Exception as e:
-            print(f"  ✗ Database error: {e}")
+            print(f"  ✗ Error: {e}")
             conn.rollback()
             failed += 1
     
