@@ -36,6 +36,10 @@ class HybridRetriever:
                 seen_titles.add(key)
                 unique.append(r)
 
+        logger.info(f"Retriever: {len(results)} raw -> {len(unique)} unique results")
+        for u in unique:
+            logger.info(f"  [{u.get('source', '?')}] {u.get('title', '?')}")
+
         return unique[: self.top_k]
 
     def _get_access_tiers(self, role: str) -> List[str]:
