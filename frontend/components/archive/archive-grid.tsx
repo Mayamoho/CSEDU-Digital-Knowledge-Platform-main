@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FolderOpen, Calendar, User, Download, Eye, Archive } from "lucide-react";
+import { FolderOpen, Calendar, User, Download, Eye, Archive, ExternalLink } from "lucide-react";
 
 const accessTierConfig = {
   public: { label: "Public", variant: "default" as const },
@@ -148,6 +148,17 @@ function ArchiveGridInner() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
+              {item.external_url && (
+                <a
+                  href={item.external_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-primary hover:underline mb-2 line-clamp-1"
+                >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{item.external_url}</span>
+                </a>
+              )}
               {item.metadata?.keywords && item.metadata.keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-3">
                   {item.metadata.keywords.slice(0, 3).map((keyword, index) => (

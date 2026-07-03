@@ -21,7 +21,8 @@ import {
   Tag, 
   AlertCircle,
   ArrowLeft,
-  Edit
+  Edit,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -145,6 +146,13 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
                 <Badge variant="outline">{item.access_tier}</Badge>
               </div>
             </div>
+            {item.external_url && (
+              <Button asChild className="w-full sm:w-auto">
+                <a href={item.external_url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" /> Open Link
+                </a>
+              </Button>
+            )}
             {item.file_path && (
               <Button onClick={handleDownload}>
                 <Download className="h-4 w-4 mr-2" /> Download
@@ -154,6 +162,22 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {item.external_url && (
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                <ExternalLink className="h-4 w-4" /> External Link
+              </div>
+              <a
+                href={item.external_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline break-all hover:no-underline"
+              >
+                {item.external_url}
+              </a>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />

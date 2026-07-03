@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2 } from "lucide-react";
+import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -173,6 +173,17 @@ export function MyUploadsContent() {
                 {item.access_tier}
               </span>
               <span className="capitalize">{item.item_type}</span>
+              {item.external_url && (
+                <a
+                  href={item.external_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span className="truncate max-w-[120px]">Link</span>
+                </a>
+              )}
             </div>
             <div className="flex gap-2">
               {item.status === 'draft' && item.item_type === 'research' && (

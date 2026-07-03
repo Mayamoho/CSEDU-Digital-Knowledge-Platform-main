@@ -133,8 +133,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		// File upload path
 		file, header, err := r.FormFile("file")
 		if err != nil {
-			// For archives, file is optional if external_url is provided
-			if itemType == "archive" && externalURL != "" {
+			// For archives, file is optional — can be URL-only or metadata-only
+			if itemType == "archive" {
 				ext = "url"
 			} else {
 				writeError(w, http.StatusBadRequest, "file is required")
@@ -189,7 +189,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	var itemID, uploadDate string
 	var filePathPtr *string
 	var externalURLPtr *string
-	
+
 	if storedKey != "" {
 		filePathPtr = &storedKey
 	}

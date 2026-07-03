@@ -206,7 +206,7 @@ export function UploadForm({
         formData.append('file', uploadedFile.file);
       }
       formData.append('title', titleState);
-      formData.append('description', abstract);
+      formData.append('abstract', abstract);
       formData.append('keywords', keywords);
       formData.append('access_tier', accessTier);
       formData.append('language', language);
