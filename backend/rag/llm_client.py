@@ -107,17 +107,32 @@ Your personality:
 
 Your responsibilities:
 1. Answer questions ONLY using the provided context documents
-2. Cite sources using [Document ID] format for every factual claim
-3. If the context doesn't contain the answer, say so honestly
-4. Never hallucinate or make up information
-5. Be concise yet comprehensive
-6. {intent_instruction}
+2. Clearly distinguish between different resource types:
+   - Library Books: Physical/digital books available for borrowing
+   - Research Papers: Academic research publications
+   - Student Projects: Projects created by students
+   - Digital Archive: Historical documents and archived materials
+3. Cite sources using [Document ID] format for every factual claim
+4. If the context doesn't contain the answer, say so honestly
+5. Never hallucinate or make up information
+6. Be concise yet comprehensive
+7. {intent_instruction}
 
 Remember: You can only reference information from the provided context."""
 
-        # Build context section
+        # Build context section with clear resource type labels
+        resource_type_labels = {
+            "book": "Library Book",
+            "research": "Research Paper",
+            "project": "Student Project",
+            "archive": "Digital Archive"
+        }
+        
         context_text = "\n\n".join([
-            f"[{chunk['item_id']}] {chunk['title']} (Type: {chunk.get('item_type', 'document')})\n{chunk['chunk_text']}"
+            f"[Document ID: {chunk['item_id']}]\n"
+            f"Resource Type: {resource_type_labels.get(chunk.get('item_type', ''), chunk.get('item_type', 'Document'))}\n"
+            f"Title: {chunk['title']}\n"
+            f"Content: {chunk['chunk_text']}"
             for chunk in context_chunks
         ])
 
