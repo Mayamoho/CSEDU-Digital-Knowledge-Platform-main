@@ -43,17 +43,29 @@ The script automatically connects to:
 
 STEP 5: Verify deployment
 --------------------------
-After the script completes, check:
+After the script completes, check services:
 
 Frontend: http://20.195.127.226:3000
 API: http://20.195.127.226:8080/health
 RAG: http://20.195.127.226:8001/health
+
+If you see 502 Bad Gateway, run diagnostics:
+./check-services.sh
+
+Common issues:
+- API container not running: Check logs with docker compose logs api
+- Port conflicts: Ports 8080, 3000, 8001 must be free
+- Build failures: Check docker compose logs for errors
 
 STEP 6: Check logs if needed
 -----------------------------
 docker compose logs -f frontend
 docker compose logs -f api
 docker compose logs -f rag
+
+Check specific container status:
+docker compose ps
+docker compose logs --tail=100 api
 
 ====================================
 WHAT WAS FIXED
