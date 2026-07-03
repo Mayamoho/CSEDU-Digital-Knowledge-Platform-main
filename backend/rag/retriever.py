@@ -82,29 +82,61 @@ class HybridRetriever:
         query_embedding: List[float],
         access_tiers: List[str]
     ) -> List[Dict[str, Any]]:
-        """Perform vector similarity search using pgvector"""
-        query = """
+        """
+        Perform vector similarity search using pgvector
+        Searches:
+        1. media_items via vector_embeddings (research/projects/archives)
+        2. library_catalog via catalog_embeddings (books)
+        """
+        # Search media items
+        media_query = """
             SELECT 
-                ve.embedding_id,
-                ve.item_id,
+                ve.embedding_id::text,
+                ve.item_id::text,
                 ve.chunk_index,
                 ve.chunk_text,
                 mi.title,
                 mi.item_type,
-                mi.access_tier,
-                1 - (ve.embedding <=> %s::vector) AS similarity_score
+                mi.access_tier::text,
+                1 - (ve.embedding <=> %s::vector) AS similarity_score,
+                'media' as source_type
             FROM vector_embeddings ve
             JOIN media_items mi ON ve.item_id = mi.item_id
             WHERE mi.access_tier = ANY(%s)
               AND mi.status = 'published'
-            ORDER BY ve.embedding <=> %s::vector
+        """
+        
+        # Search catalog books (always public access)
+        catalog_query = """
+            SELECT 
+                ce.embedding_id::text,
+                ce.catalog_id::text as item_id,
+                0 as chunk_index,
+                ce.chunk_text,
+                lc.title,
+                'book' as item_type,
+                'public' as access_tier,
+                1 - (ce.embedding <=> %s::vector) AS similarity_score,
+                'catalog' as source_type
+            FROM catalog_embeddings ce
+            JOIN library_catalog lc ON ce.catalog_id = lc.catalog_id
+        """
+        
+        # Combine both searches
+        combined_query = f"""
+            ({media_query})
+            UNION ALL
+            ({catalog_query})
+            ORDER BY similarity_score DESC
             LIMIT %s
         """
         
         try:
             results = db.execute_query(
-                query,
-                (query_embedding, access_tiers, query_embedding, self.vector_limit)
+                combined_query,
+                (query_embedding, access_tiers,  # media params
+                 query_embedding,                 # catalog params
+                 self.vector_limit)
             )
             return results or []
         except Exception as e:
@@ -117,11 +149,15 @@ class HybridRetriever:
         access_tiers: List[str],
         language: str
     ) -> List[Dict[str, Any]]:
-        """Perform PostgreSQL full-text search"""
+        """
+        Perform PostgreSQL full-text search
+        Searches BOTH media_items (research/projects/archives) AND library_catalog (books)
+        """
         # Choose FTS configuration based on language
         fts_config = "english" if language == "en" else "simple"
         
-        query_sql = f"""
+        # Search in media items (research papers, projects, archives with embeddings)
+        media_query = f"""
             SELECT 
                 ve.embedding_id,
                 ve.item_id,
@@ -131,22 +167,68 @@ class HybridRetriever:
                 mi.item_type,
                 mi.access_tier,
                 ts_rank_cd(
-                    to_tsvector('{fts_config}', ve.chunk_text),
+                    to_tsvector('{fts_config}', ve.chunk_text || ' ' || mi.title),
                     plainto_tsquery('{fts_config}', %s)
-                ) AS fts_score
+                ) AS fts_score,
+                'media' as source_type
             FROM vector_embeddings ve
             JOIN media_items mi ON ve.item_id = mi.item_id
             WHERE mi.access_tier = ANY(%s)
               AND mi.status = 'published'
-              AND to_tsvector('{fts_config}', ve.chunk_text) @@ plainto_tsquery('{fts_config}', %s)
+              AND (
+                  to_tsvector('{fts_config}', ve.chunk_text) @@ plainto_tsquery('{fts_config}', %s)
+                  OR to_tsvector('{fts_config}', mi.title) @@ plainto_tsquery('{fts_config}', %s)
+              )
+        """
+        
+        # Search in library catalog (books)
+        catalog_query = f"""
+            SELECT 
+                lc.catalog_id::text as embedding_id,
+                lc.catalog_id::text as item_id,
+                0 as chunk_index,
+                CONCAT(
+                    'Title: ', lc.title, E'\n',
+                    'Author: ', lc.author, E'\n',
+                    CASE WHEN lc.isbn IS NOT NULL THEN CONCAT('ISBN: ', lc.isbn, E'\n') ELSE '' END,
+                    'Format: ', lc.format, E'\n',
+                    'Year: ', COALESCE(lc.year::text, 'N/A'), E'\n',
+                    'Location: ', COALESCE(lc.location, 'Main Library'), E'\n',
+                    'Available: ', lc.available_copies, ' of ', lc.total_copies, ' copies'
+                ) as chunk_text,
+                lc.title,
+                'book' as item_type,
+                'public' as access_tier,
+                ts_rank_cd(
+                    to_tsvector('{fts_config}', lc.title || ' ' || lc.author || ' ' || COALESCE(lc.isbn, '')),
+                    plainto_tsquery('{fts_config}', %s)
+                ) AS fts_score,
+                'catalog' as source_type
+            FROM library_catalog lc
+            WHERE (
+                to_tsvector('{fts_config}', lc.title) @@ plainto_tsquery('{fts_config}', %s)
+                OR to_tsvector('{fts_config}', lc.author) @@ plainto_tsquery('{fts_config}', %s)
+                OR (lc.isbn IS NOT NULL AND lc.isbn ILIKE %s)
+            )
+        """
+        
+        # Combine both queries with UNION ALL
+        combined_query = f"""
+            ({media_query})
+            UNION ALL
+            ({catalog_query})
             ORDER BY fts_score DESC
             LIMIT %s
         """
         
         try:
+            # Parameters: media (q, tiers, q, q) + catalog (q, q, q, isbn_pattern) + limit
+            isbn_pattern = f"%{query}%"
             results = db.execute_query(
-                query_sql,
-                (query, access_tiers, query, self.fts_limit)
+                combined_query,
+                (query, access_tiers, query, query,  # media search params
+                 query, query, query, isbn_pattern,  # catalog search params
+                 self.fts_limit)
             )
             return results or []
         except Exception as e:
