@@ -15,7 +15,10 @@ git reset --hard origin/main
 
 # Rebuild frontend and RAG service with all fixes
 echo ""
-echo "2. Rebuilding frontend and RAG service..."
+echo "2. Cleaning Docker cache..."
+docker builder prune -f 2>/dev/null || true
+
+echo "   Rebuilding frontend and RAG service..."
 docker compose -f docker-compose.prod.yml build frontend rag
 
 # Restart the stack (including RAG now)
