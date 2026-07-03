@@ -83,13 +83,13 @@ def create_catalog_embedding_table():
     
     cursor = conn.cursor()
     
-    # Create table for catalog embeddings
+    # Create table for catalog embeddings (384 dimensions for BAAI/bge-base-en-v1.5)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS catalog_embeddings (
             embedding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             catalog_id UUID NOT NULL REFERENCES library_catalog(catalog_id) ON DELETE CASCADE,
             chunk_text TEXT NOT NULL,
-            embedding vector(768),
+            embedding vector(384),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE(catalog_id)
         )
