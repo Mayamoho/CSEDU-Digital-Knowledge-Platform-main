@@ -458,9 +458,11 @@ func (h *Handler) ReviewPaper(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update media_items status
+	// If approved, keep status as 'review' - author must publish manually
+	// If rejected, revert to 'draft'
 	newStatus := "draft"
 	if req.Approved {
-		newStatus = "published"
+		newStatus = "review"
 	}
 
 	_, err = tx.Exec(ctx,

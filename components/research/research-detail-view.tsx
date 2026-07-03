@@ -157,7 +157,7 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
   const isAdmin = user?.role_tier === "administrator" || user?.role_tier === "librarian";
   const canEdit = isAuthor || isAdmin;
   const canSubmitForReview = isAuthor && paper.status === "draft";
-  const canPublish = isAuthor && paper.status === "draft" && paper.reviewer_id != null;
+  const canPublish = isAuthor && paper.status === "review" && paper.reviewer_id != null;
   const canReview = (isReviewer || isAdmin) && paper.status === "review";
 
   return (
