@@ -19,7 +19,8 @@ class HybridRetriever:
         self,
         query: str,
         user_role: str,
-        language: str = "en"
+        language: str = "en",
+        intent: str = "question"
     ) -> List[Dict[str, Any]]:
         """
         Perform hybrid retrieval with access control
@@ -28,6 +29,7 @@ class HybridRetriever:
             query: User's search query
             user_role: User's role tier for access control
             language: Query language (en/bn)
+            intent: Query intent for weighted retrieval
             
         Returns:
             List of relevant document chunks with metadata
@@ -38,14 +40,29 @@ class HybridRetriever:
         # Generate query embedding
         query_embedding = embedder.embed_text(query)
         
+        # Adjust retrieval strategy based on intent
+        if intent == "search" or intent == "availability":
+            # For search intents, prioritize FTS over vector
+            vector_weight = 0.4
+            fts_weight = 0.6
+        else:
+            # For question intents, balance both
+            vector_weight = 0.5
+            fts_weight = 0.5
+        
         # Perform vector search
         vector_results = self._vector_search(query_embedding, access_tiers)
         
         # Perform full-text search
         fts_results = self._fulltext_search(query, access_tiers, language)
         
-        # Merge and rank results using Reciprocal Rank Fusion
-        merged_results = self._reciprocal_rank_fusion(vector_results, fts_results)
+        # Merge and rank results using weighted RRF
+        merged_results = self._reciprocal_rank_fusion(
+            vector_results, 
+            fts_results,
+            vector_weight,
+            fts_weight
+        )
         
         return merged_results[:self.top_k]
 
@@ -139,13 +156,15 @@ class HybridRetriever:
     def _reciprocal_rank_fusion(
         self,
         vector_results: List[Dict],
-        fts_results: List[Dict]
+        fts_results: List[Dict],
+        vector_weight: float = 0.5,
+        fts_weight: float = 0.5
     ) -> List[Dict[str, Any]]:
         """
-        Merge results using Reciprocal Rank Fusion (RRF)
+        Merge results using weighted Reciprocal Rank Fusion (RRF)
         
-        RRF formula: score = sum(1 / (k + rank_i))
-        where k=60 is a constant, rank_i is the rank in each list
+        RRF formula: score = vector_weight * (1 / (k + rank_vector)) + fts_weight * (1 / (k + rank_fts))
+        where k=60 is a constant
         """
         k = 60
         scores = {}
@@ -154,14 +173,14 @@ class HybridRetriever:
         # Score vector results
         for rank, result in enumerate(vector_results, start=1):
             chunk_id = result['embedding_id']
-            scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
+            scores[chunk_id] = scores.get(chunk_id, 0) + vector_weight * (1 / (k + rank))
             if chunk_id not in result_map:
                 result_map[chunk_id] = result
         
         # Score FTS results
         for rank, result in enumerate(fts_results, start=1):
             chunk_id = result['embedding_id']
-            scores[chunk_id] = scores.get(chunk_id, 0) + (1 / (k + rank))
+            scores[chunk_id] = scores.get(chunk_id, 0) + fts_weight * (1 / (k + rank))
             if chunk_id not in result_map:
                 result_map[chunk_id] = result
         

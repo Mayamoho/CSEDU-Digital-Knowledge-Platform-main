@@ -19,7 +19,9 @@ class LLMClient:
         query: str,
         context_chunks: List[Dict[str, Any]],
         language: str = "en",
-        model_tier: str = "simple"
+        model_tier: str = "simple",
+        conversation_context: str = "",
+        intent: str = "question"
     ) -> Dict[str, Any]:
         """
         Generate AI response using retrieved context
@@ -29,12 +31,14 @@ class LLMClient:
             context_chunks: Retrieved document chunks
             language: Response language (en/bn)
             model_tier: Model complexity (simple/long/complex)
+            conversation_context: Previous conversation history
+            intent: Detected intent (search/question/compare/etc)
             
         Returns:
             Dict with response text, citations, and metadata
         """
         # Build prompt with context
-        prompt = self._build_prompt(query, context_chunks, language)
+        prompt = self._build_prompt(query, context_chunks, language, conversation_context, intent)
         
         # Select model based on tier
         model = self._select_model(model_tier)
@@ -77,25 +81,50 @@ class LLMClient:
         self,
         query: str,
         context_chunks: List[Dict[str, Any]],
-        language: str
+        language: str,
+        conversation_context: str = "",
+        intent: str = "question"
     ) -> str:
         """Build the RAG prompt with context and instructions"""
-        system_prompt = """You are the CSEDU Knowledge Assistant, an AI helper for the Department of Computer Science and Engineering at the University of Dhaka.
+        
+        # Intent-specific system prompts
+        intent_prompts = {
+            "search": "Focus on listing and describing relevant documents. Be concise and organized.",
+            "question": "Provide a detailed explanation. Use examples from the documents.",
+            "compare": "Compare and contrast the items. Highlight similarities and differences clearly.",
+            "summarize": "Provide a comprehensive yet concise summary of the key points.",
+            "availability": "Check availability status and provide borrowing information if applicable."
+        }
+        
+        intent_instruction = intent_prompts.get(intent, intent_prompts["question"])
+        
+        system_prompt = f"""You are the CSEDU Knowledge Assistant, an AI helper for the Department of Computer Science and Engineering at the University of Dhaka.
+
+Your personality:
+- Helpful, knowledgeable, and friendly
+- Academic but approachable
+- Bilingual (English and Bengali)
 
 Your responsibilities:
 1. Answer questions ONLY using the provided context documents
 2. Cite sources using [Document ID] format for every factual claim
 3. If the context doesn't contain the answer, say so honestly
 4. Never hallucinate or make up information
-5. Be concise and accurate
+5. Be concise yet comprehensive
+6. {intent_instruction}
 
 Remember: You can only reference information from the provided context."""
 
         # Build context section
         context_text = "\n\n".join([
-            f"[{chunk['item_id']}] {chunk['title']}\n{chunk['chunk_text']}"
+            f"[{chunk['item_id']}] {chunk['title']} (Type: {chunk.get('item_type', 'document')})\n{chunk['chunk_text']}"
             for chunk in context_chunks
         ])
+
+        # Add conversation context if available
+        conversation_section = ""
+        if conversation_context:
+            conversation_section = f"\n\nConversation History:\n{conversation_context}\n"
 
         # Language instruction
         lang_instruction = {
@@ -105,11 +134,11 @@ Remember: You can only reference information from the provided context."""
         }.get(language, "Answer in English.")
 
         user_prompt = f"""Context Documents:
-{context_text}
+{context_text}{conversation_section}
 
 Question: {query}
 
-Instructions: {lang_instruction} Cite document IDs in [brackets] for all facts."""
+Instructions: {lang_instruction} Cite document IDs in [brackets] for all facts. Be {intent} in your response style."""
 
         return f"{system_prompt}\n\n{user_prompt}"
 
