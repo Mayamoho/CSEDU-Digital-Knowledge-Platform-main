@@ -1,0 +1,71 @@
+====================================
+VM DEPLOYMENT STEPS
+====================================
+
+Server: 20.195.127.226
+User: azureuser
+Password: bMe2@6XgqvYNV8$wzQh7fL#s
+
+STEP 1: SSH into the server
+----------------------------
+ssh azureuser@20.195.127.226
+
+STEP 2: Navigate to project directory
+--------------------------------------
+cd ~/CSEDU-Digital-Knowledge-Platform-main
+
+STEP 3: Run the deployment script
+----------------------------------
+chmod +x quick-update.sh
+./quick-update.sh
+
+This script will:
+- Pull latest code from GitHub
+- Fix file structure issues
+- Kill any processes blocking ports (5432, 6379, 8080, 8001, 9000, 9001, 3000, 80)
+- Stop all containers
+- Clean up orphaned containers
+- Remove Docker cache
+- Start services in order: postgres → redis → minio → api → rag → workers → frontend → nginx
+- Check service health
+
+STEP 4: Verify deployment
+--------------------------
+After the script completes, check:
+
+Frontend: http://20.195.127.226:3000
+API: http://20.195.127.226:8080/health
+RAG: http://20.195.127.226:8001/health
+
+STEP 5: Check logs if needed
+-----------------------------
+docker compose logs -f frontend
+docker compose logs -f api
+docker compose logs -f rag
+
+====================================
+WHAT WAS FIXED
+====================================
+
+1. Profile editing and password change dialogs now work
+2. Files copied to correct location for Docker build
+3. Port conflict resolution in deployment script
+4. Proper service startup order
+5. Enhanced RAG assistant with:
+   - Intent detection (search/question/compare/summarize/availability)
+   - Context-aware conversations
+   - Confidence scoring
+   - Suggested follow-up questions (bilingual)
+   - Conversation history support
+
+====================================
+NEW FEATURES AVAILABLE
+====================================
+
+1. Edit Profile: Click "Edit Profile" button on profile page
+2. Change Password: Click "Change Password" button on profile page
+3. Interactive CSEDU Assistant: Enhanced with intent detection and follow-up suggestions
+4. Search: Full-text search across catalog (fixed TypeScript errors)
+5. Email notifications: Infrastructure ready (disabled by default)
+
+====================================
