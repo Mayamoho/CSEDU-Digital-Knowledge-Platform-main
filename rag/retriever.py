@@ -3,7 +3,6 @@ from database import db
 from embedder import embedder
 from config import settings
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -23,23 +22,12 @@ class HybridRetriever:
         query_embedding = embedder.embed_text(query)
 
         results = []
-
-        # 1. Vector search (chunked documents)
         results.extend(self._vector_search(query_embedding, access_tiers))
-
-        # 2. Library catalog FTS
         results.extend(self._search_catalog(query, language))
-
-        # 3. Research papers FTS
         results.extend(self._search_research(query, access_tiers, language))
-
-        # 4. Student projects FTS
         results.extend(self._search_projects(query, language))
-
-        # 5. Media items FTS
         results.extend(self._search_media(query, access_tiers, language))
 
-        # Deduplicate by title and return top results
         seen_titles = set()
         unique = []
         for r in results:
@@ -106,7 +94,7 @@ class HybridRetriever:
                 'library_catalog' as item_type,
                 'public' as access_tier,
                 'catalog' as source,
-                coalesce(author, '') || ' | ' || coalesce(location, '') || ' | ISBN: ' || coalesce(isbn, 'N/A') as chunk_text,
+                coalesce(author, '') || ' | Location: ' || coalesce(location, '') || ' | ISBN: ' || coalesce(isbn, 'N/A') as chunk_text,
                 ts_rank_cd(
                     to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(author, '')),
                     plainto_tsquery('{fts}', %s)
@@ -128,24 +116,29 @@ class HybridRetriever:
         fts = "english" if language == "en" else "simple"
         q = f"""
             SELECT
-                paper_id::text as item_id,
-                title,
-                'research' as item_type,
-                access_tier,
+                rp.item_id::text,
+                mi.title,
+                mi.item_type,
+                mi.access_tier,
                 'research' as source,
-                coalesce(authors::text, '') || ' | ' || coalesce(abstract, '') as chunk_text,
+                coalesce(array_to_string(rp.authors, ', '), 'Unknown authors') || ' | ' || coalesce(mm.abstract, '') || ' | Keywords: ' || coalesce(array_to_string(mm.tags, ', '), 'N/A') as chunk_text,
                 ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(abstract, '') || ' ' || coalesce(array_to_string(keywords, ' '), '')),
+                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
                     plainto_tsquery('{fts}', %s)
                 ) as score
-            FROM research_papers
-            WHERE status = 'published'
-              AND to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(abstract, '') || ' ' || coalesce(array_to_string(keywords, ' '), '')) @@ plainto_tsquery('{fts}', %s)
+            FROM research_papers rp
+            JOIN media_items mi ON rp.item_id = mi.item_id
+            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+            WHERE mi.status = 'published'
+              AND mi.access_tier = ANY(%s)
+              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
             ORDER BY score DESC
             LIMIT %s
         """
         try:
-            return db.execute_query(q, (query, query, self.fts_limit)) or []
+            return (
+                db.execute_query(q, (query, access_tiers, query, self.fts_limit)) or []
+            )
         except Exception as e:
             logger.error(f"Research search error: {e}")
             return []
@@ -154,19 +147,21 @@ class HybridRetriever:
         fts = "english" if language == "en" else "simple"
         q = f"""
             SELECT
-                project_id::text as item_id,
-                title,
-                'project' as item_type,
-                'student' as access_tier,
+                sp.item_id::text,
+                mi.title,
+                mi.item_type,
+                mi.access_tier,
                 'project' as source,
-                coalesce(description, '') || ' | ' || coalesce(array_to_string(tech_stack, ' '), '') as chunk_text,
+                coalesce(array_to_string(sp.team_members, ', '), '') || ' | Course: ' || coalesce(sp.course_code, 'N/A') || ' | Year: ' || sp.academic_year::text || ' | ' || coalesce(mm.abstract, '') as chunk_text,
                 ts_rank_cd(
-                    to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(tech_stack, ' '), '')),
+                    to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
                     plainto_tsquery('{fts}', %s)
                 ) as score
-            FROM student_projects
-            WHERE status = 'approved'
-              AND to_tsvector('{fts}', coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(array_to_string(tech_stack, ' '), '')) @@ plainto_tsquery('{fts}', %s)
+            FROM student_projects sp
+            JOIN media_items mi ON sp.item_id = mi.item_id
+            LEFT JOIN media_metadata mm ON mi.item_id = mm.item_id
+            WHERE mi.status = 'published'
+              AND to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')) @@ plainto_tsquery('{fts}', %s)
             ORDER BY score DESC
             LIMIT %s
         """
@@ -187,7 +182,7 @@ class HybridRetriever:
                 mi.item_type,
                 mi.access_tier,
                 'media' as source,
-                coalesce(mm.abstract, '') || ' | ' || coalesce(array_to_string(mm.tags, ' '), '') as chunk_text,
+                coalesce(mm.abstract, '') || ' | Tags: ' || coalesce(array_to_string(mm.tags, ' '), 'N/A') as chunk_text,
                 ts_rank_cd(
                     to_tsvector('{fts}', coalesce(mi.title, '') || ' ' || coalesce(mm.abstract, '') || ' ' || coalesce(array_to_string(mm.tags, ' '), '')),
                     plainto_tsquery('{fts}', %s)
