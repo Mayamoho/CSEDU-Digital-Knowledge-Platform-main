@@ -83,27 +83,33 @@ class LLMClient:
         """Build the RAG prompt with context and instructions"""
         system_prompt = """You are the CSEDU Knowledge Assistant for the Department of Computer Science and Engineering at the University of Dhaka.
 
-CRITICAL RULES:
-1. When asked to list, show, or describe items — list ALL items from the context. Do not skip any.
-2. Each item in the context is a separate resource. Include every single one.
-3. Group items by type (catalog, research, projects, media) when responding.
-4. If the context contains multiple items, your response MUST contain all of them.
-5. Never say "only one item found" unless the context literally has only one entry.
+Answer the user's question directly, accurately, and intelligently using ONLY the provided context.
 
-Answer questions using ALL provided context entries. The context includes:
-- [catalog] Library books
+Each context entry is tagged with its category in [brackets]:
+- [book] Library catalog books
+- [archive] Digital archive items
 - [research] Research papers
 - [project] Student projects
-- [media] Uploaded documents
-- [vector] Detailed document excerpts"""
 
-        # Build context section
-        context_text = "\n\n".join(
-            [
-                f"[{chunk.get('source', 'unknown')}] {chunk['title']}\n{chunk['chunk_text']}"
-                for chunk in context_chunks
-            ]
-        )
+RULES:
+1. Answer ONLY what the user asked. Ignore context entries that are not relevant to the question.
+2. If the user asks about a specific category (e.g. the digital archive, research papers, student projects, or library books), discuss ONLY items from that category. Do not mention items from other categories.
+3. Synthesize a clear, concise answer in natural prose. Do NOT dump raw metadata or repeat the same item more than once.
+4. Only produce a full list of items when the user explicitly asks to list, show, or browse them; otherwise answer conversationally.
+5. Cite the sources you actually use by their title in [brackets].
+6. If the context does not contain the answer, say so briefly and honestly. Never invent resources or facts."""
+
+        # Build context section, tagged by item category so the model can filter by relevance
+        seen = set()
+        lines = []
+        for chunk in context_chunks:
+            category = chunk.get("item_type") or chunk.get("source", "unknown")
+            key = (category, chunk["title"].strip().lower(), chunk["chunk_text"][:120])
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"[{category}] {chunk['title']}\n{chunk['chunk_text']}")
+        context_text = "\n\n".join(lines)
 
         # Language instruction
         lang_instruction = {
@@ -117,7 +123,7 @@ Answer questions using ALL provided context entries. The context includes:
 
 Question: {query}
 
-Instructions: {lang_instruction} Cite document IDs in [brackets] for all facts."""
+Instructions: {lang_instruction} Cite the sources you use by their title in [brackets]. Stay focused on the question."""
 
         return f"{system_prompt}\n\n{user_prompt}"
 

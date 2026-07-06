@@ -112,8 +112,13 @@ class HybridRetriever:
         """
         try:
             results = db.execute_query(q, (query, query, self.fts_limit)) or []
-            # If no FTS matches, return all books (for queries like "list all books")
-            if not results:
+            # Only fall back to "all books" when the user is actually asking about the
+            # library catalog — otherwise unrelated questions get flooded with every book.
+            catalog_intent = any(
+                kw in query.lower()
+                for kw in ["book", "catalog", "library", "borrow", "textbook", "বই", "লাইব্রেরি"]
+            )
+            if not results and catalog_intent:
                 fallback = """
                     SELECT
                         lc.catalog_id::text as item_id,
