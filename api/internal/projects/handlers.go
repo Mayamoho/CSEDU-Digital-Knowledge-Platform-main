@@ -141,25 +141,50 @@ func (h *Handler) SubmitProject(w http.ResponseWriter, r *http.Request) {
 			format = "apk"
 		}
 	}
-	_, err = tx.Exec(ctx,
-		`INSERT INTO media_items (item_id, title, item_type, format, status, access_tier, created_by, file_path)
-		 VALUES ($1, $2, 'project', $3, 'published', 'student', $4, $5)`,
-		itemID, req.Title, format, userID, filePath,
-	)
+	// If a file was uploaded, a media_item already exists (created by uploadMedia).
+	// Reuse it instead of creating a duplicate, otherwise the uploaded item becomes an
+	// orphan project with no student_projects row and "View Details" fails.
+	reusedExisting := false
+	if filePath != nil {
+		if err = tx.QueryRow(ctx,
+			`SELECT item_id FROM media_items WHERE file_path = $1 AND created_by = $2`,
+			*filePath, userID,
+		).Scan(&itemID); err == nil {
+			reusedExisting = true
+		}
+	}
+
+	if reusedExisting {
+		_, err = tx.Exec(ctx,
+			`UPDATE media_items
+			 SET title = $1, item_type = 'project', format = $2, status = 'published', access_tier = 'student'
+			 WHERE item_id = $3`,
+			req.Title, format, itemID,
+		)
+	} else {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO media_items (item_id, title, item_type, format, status, access_tier, created_by, file_path)
+			 VALUES ($1, $2, 'project', $3, 'published', 'student', $4, $5)`,
+			itemID, req.Title, format, userID, filePath,
+		)
+	}
 	if err != nil {
-		log.Printf("Failed to create media item: %v", err)
+		log.Printf("Failed to save media item: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create project")
 		return
 	}
 
-	// Create metadata
+	// Upsert metadata (uploadMedia may have already inserted a row for this item)
 	_, err = tx.Exec(ctx,
 		`INSERT INTO media_metadata (item_id, abstract, keywords, language)
-		 VALUES ($1, $2, $3, 'en')`,
+		 VALUES ($1, $2, $3, 'en')
+		 ON CONFLICT (item_id) DO UPDATE SET
+		   abstract = EXCLUDED.abstract,
+		   keywords = EXCLUDED.keywords`,
 		itemID, req.Abstract, req.Keywords,
 	)
 	if err != nil {
-		log.Printf("Failed to create metadata: %v", err)
+		log.Printf("Failed to save metadata: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create project")
 		return
 	}
