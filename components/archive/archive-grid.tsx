@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FolderOpen, Calendar, User, Download, Eye, Archive } from "lucide-react";
+import { FolderOpen, Calendar, User, Download, Eye, Archive, ExternalLink } from "lucide-react";
 
 const accessTierConfig = {
   public: { label: "Public", variant: "default" as const },
@@ -162,14 +162,32 @@ function ArchiveGridInner() {
                   )}
                 </div>
               )}
-              <div className="text-xs text-muted-foreground">
-                {item.format.toUpperCase()}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {item.external_url ? (
+                  <a
+                    href={item.external_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> External link
+                  </a>
+                ) : (
+                  <span>{item.format.toUpperCase()}</span>
+                )}
               </div>
             </CardContent>
-            <CardFooter className="pt-0">
+            <CardFooter className="pt-0 flex flex-col gap-2">
               <Button variant="outline" className="w-full" asChild>
                 <Link href={`/archive/${item.item_id}`}>View Details</Link>
               </Button>
+              {item.external_url && (
+                <Button variant="ghost" className="w-full" asChild>
+                  <a href={item.external_url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" /> Open Link
+                  </a>
+                </Button>
+              )}
             </CardFooter>
           </Card>
         ))}

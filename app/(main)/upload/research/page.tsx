@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function UploadResearchPage() {
   return (
-    <AuthGuard requireAuth allowedRoles={['researcher', 'librarian', 'administrator']}>
+    <AuthGuard requireAuth allowedRoles={['student', 'researcher', 'administrator']}>
       <div className="container max-w-4xl px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">

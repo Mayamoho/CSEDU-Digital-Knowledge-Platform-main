@@ -11,10 +11,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   BookOpen, Upload, FileText, Clock, AlertTriangle,
-  ArrowRight, Library, Bot, FolderOpen, User, Calendar, Info,
+  ArrowRight, Library, Bot, FolderOpen, User, Calendar, Info, Archive,
 } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
 import { RoleGate } from "@/components/auth/role-gate";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { ReviewNotifications } from "@/components/research/review-notifications";
 
 interface DashboardStats {
@@ -122,9 +128,7 @@ export function DashboardContent() {
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2">
               <QuickActionButton href="/catalog"  icon={Library}  label="Browse Catalog"        description="Search library resources" />
-              <RoleGate allowedRoles={['student', 'researcher', 'librarian', 'administrator']} hideIfUnauthorized>
-                <QuickActionButton href="/upload"   icon={Upload}   label="Upload Media"           description="Share documents" />
-              </RoleGate>
+              <UploadMediaMenu />
               <QuickActionButton href="/research" icon={FileText} label="Research Repository"    description="Explore papers" />
               <QuickActionButton href="/projects" icon={BookOpen} label="Student Projects"       description="View projects" />
             </div>
@@ -274,6 +278,62 @@ function StatsCard({ title, value, icon: Icon, href, variant = "default" }: {
   );
 }
 
+// Role-based upload menu — opens a dropdown with the upload options the
+// current user is allowed to use, then links to the matching upload page.
+function UploadMediaMenu() {
+  const { user } = useAuth();
+  const role = user?.role_tier;
+
+  const uploadOptions: { href: string; label: string; description: string; icon: React.ComponentType<{ className?: string }> }[] =
+    role === "student" || role === "researcher" || role === "administrator"
+      ? [
+          { href: "/upload/research", label: "Upload Research", description: "Papers & publications", icon: FileText },
+          { href: "/upload/archive", label: "Upload Archive", description: "Historical & media files", icon: Archive },
+          { href: "/upload/projects", label: "Upload Project", description: "Student projects", icon: FolderOpen },
+        ]
+      : role === "librarian"
+      ? [{ href: "/upload/archive", label: "Upload Archive", description: "Historical & media files", icon: Archive }]
+      : [];
+
+  // No upload options for public/unauthenticated ("user") role.
+  if (uploadOptions.length === 0) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Upload className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">Upload Media</p>
+            <p className="text-xs text-muted-foreground">Choose what to upload</p>
+          </div>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60">
+        {uploadOptions.map((opt) => {
+          const Icon = opt.icon;
+          return (
+            <DropdownMenuItem key={opt.href} asChild>
+              <Link href={opt.href} className="flex items-center gap-2 cursor-pointer">
+                <Icon className="h-4 w-4" />
+                <div className="flex flex-col">
+                  <span className="text-sm">{opt.label}</span>
+                  <span className="text-xs text-muted-foreground">{opt.description}</span>
+                </div>
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function QuickActionButton({ href, icon: Icon, label, description }: {
   href: string; icon: React.ComponentType<{ className?: string }>;
   label: string; description: string;
@@ -419,6 +479,7 @@ function LibrarianDashboard() {
           <div className="grid gap-3 sm:grid-cols-2">
             <QuickActionButton href="/catalog" icon={Library} label="Manage Catalog" description="Add or update books" />
             <QuickActionButton href="/fines" icon={Clock} label="Fine Management" description="Monitor member fines" />
+            <QuickActionButton href="/upload/archive" icon={Archive} label="Upload Archive" description="Add archival materials" />
           </div>
         </CardContent>
       </Card>

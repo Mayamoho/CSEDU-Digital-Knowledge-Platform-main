@@ -74,10 +74,10 @@ func (h *Handler) SubmitResearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only researchers can submit research papers
+	// Students, researchers and administrators can submit research papers
 	roleTier, _ := authpkg.GetRoleTier(r)
-	if roleTier != "researcher" && roleTier != "administrator" {
-		writeError(w, http.StatusForbidden, "only researchers can submit research papers")
+	if roleTier != "student" && roleTier != "researcher" && roleTier != "administrator" {
+		writeError(w, http.StatusForbidden, "you are not allowed to submit research papers")
 		return
 	}
 

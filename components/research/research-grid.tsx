@@ -32,7 +32,7 @@ function ResearchGridInner() {
     const fetchPapers = async () => {
       setIsLoading(true);
       try {
-        const response = await apiClient.listResearch({ status: "published" });
+        const response = await apiClient.listResearch();
         const data = response?.data || [];
         setPapers(Array.isArray(data) ? data : []);
         setTotal(response?.total || 0);

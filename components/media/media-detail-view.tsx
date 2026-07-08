@@ -13,15 +13,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { 
-  FileText, 
-  Download, 
-  Calendar, 
-  User, 
-  Tag, 
+import {
+  FileText,
+  Download,
+  Calendar,
+  User,
+  Tag,
   AlertCircle,
   ArrowLeft,
-  Edit
+  Edit,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -147,6 +148,13 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
                 <Download className="h-4 w-4 mr-2" /> Download
               </Button>
             )}
+            {item.external_url && (
+              <Button asChild variant={item.file_path ? "outline" : "default"}>
+                <a href={item.external_url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" /> Open Link
+                </a>
+              </Button>
+            )}
           </div>
         </CardHeader>
 
@@ -163,6 +171,22 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
               </div>
             )}
           </div>
+
+          {item.external_url && (
+            <div>
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <ExternalLink className="h-4 w-4" /> External Resource
+              </h3>
+              <a
+                href={item.external_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline break-all"
+              >
+                {item.external_url}
+              </a>
+            </div>
+          )}
 
           {item.metadata?.abstract && (
             <div>

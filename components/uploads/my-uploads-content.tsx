@@ -133,16 +133,45 @@ export function MyUploadsContent() {
       }
     };
 
-    const handleViewDetails = () => {
-      if (item.item_type === 'research' && item.paper_id) {
-        window.location.href = `/research/${item.paper_id}`;
-      } else if (item.item_type === 'project' && item.project_id) {
-        window.location.href = `/projects/${item.project_id}`;
-      } else if (item.item_type === 'archive') {
+    const handleViewDetails = async () => {
+      if (item.item_type === 'archive') {
         window.location.href = `/archive/${item.item_id}`;
-      } else {
-        toast.error(`${item.item_type} details not found`);
+        return;
       }
+
+      if (item.item_type === 'research') {
+        let paperId = item.paper_id;
+        if (!paperId) {
+          try {
+            const res = await apiClient.listResearch();
+            paperId = res?.data?.find((p) => p.item_id === item.item_id)?.paper_id;
+          } catch (error) {
+            console.error("Failed to resolve research paper:", error);
+          }
+        }
+        if (paperId) {
+          window.location.href = `/research/${paperId}`;
+          return;
+        }
+      }
+
+      if (item.item_type === 'project') {
+        let projectId = item.project_id;
+        if (!projectId) {
+          try {
+            const res = await apiClient.listProjects();
+            projectId = res?.data?.find((p) => p.item_id === item.item_id)?.project_id;
+          } catch (error) {
+            console.error("Failed to resolve project:", error);
+          }
+        }
+        if (projectId) {
+          window.location.href = `/projects/${projectId}`;
+          return;
+        }
+      }
+
+      toast.error(`${item.item_type} details not found`);
     };
 
     return (
