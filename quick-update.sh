@@ -13,13 +13,19 @@ echo "1. Pulling latest changes from git..."
 git fetch origin
 git reset --hard origin/main
 
-# Rebuild frontend and RAG service with all fixes
+# Apply pending DB migrations (idempotent)
+echo ""
+echo "1b. Applying database migrations..."
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U csedu_user -d csedu_platform < infra/db/migrations/002_media_url_format.sql || true
+
+# Rebuild frontend, API and RAG service with all fixes
 echo ""
 echo "2. Cleaning Docker cache..."
 docker builder prune -f 2>/dev/null || true
 
-echo "   Rebuilding frontend and RAG service..."
-docker compose -f docker-compose.prod.yml build frontend rag
+echo "   Rebuilding frontend, API and RAG service..."
+docker compose -f docker-compose.prod.yml build frontend api rag
 
 # Restart the stack (including RAG now)
 echo ""

@@ -185,7 +185,10 @@ export function Header() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer text-destructive focus:text-destructive"
-                  onClick={logout}
+                  onClick={async () => {
+                    await logout();
+                    window.location.href = "/login";
+                  }}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out

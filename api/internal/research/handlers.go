@@ -203,7 +203,7 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 		         FROM research_papers rp
 		         JOIN media_items m ON rp.item_id = m.item_id
 		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-		         WHERE m.status = 'review' AND m.created_by != $1
+		         WHERE m.status = 'review' AND m.created_by != $1 AND rp.reviewer_id IS NULL
 		         ORDER BY rp.submitted_at ASC`
 		args = append(args, userID)
 	} else if roleTier == "administrator" || roleTier == "librarian" || roleTier == "researcher" {
@@ -378,13 +378,39 @@ func (h *Handler) SubmitForReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(ctx)
+
 	// Update status to review
-	_, err = h.db.Exec(r.Context(),
+	_, err = tx.Exec(ctx,
 		`UPDATE media_items SET status = 'review' WHERE item_id = $1`,
 		itemID,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to submit for review")
+		return
+	}
+
+	// Clear any previous review so a resubmitted paper re-enters the
+	// review queue instead of looking already accepted/rejected.
+	_, err = tx.Exec(ctx,
+		`UPDATE research_papers
+		 SET reviewer_id = NULL, review_notes = NULL, reviewed_at = NULL
+		 WHERE paper_id = $1`,
+		paperID,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to submit for review")
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit transaction")
 		return
 	}
 

@@ -19,9 +19,19 @@ import { toast } from "sonner";
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
   review: { label: "Under Review", variant: "outline" },
+  accepted: { label: "Accepted — Ready to Publish", variant: "default" },
+  rejected: { label: "Rejected — Edit & Resubmit", variant: "destructive" },
   published: { label: "Published", variant: "default" },
   archived: { label: "Archived", variant: "destructive" },
 };
+
+// Accepted = still 'review' but a reviewer approved it; rejected = back to
+// 'draft' with a completed review attached.
+function deriveStatus(paper: ResearchPaper): string {
+  if (paper.status === "review" && paper.reviewer_id) return "accepted";
+  if (paper.status === "draft" && paper.reviewed_at) return "rejected";
+  return paper.status;
+}
 
 export function ResearchDetailView({ paperId }: { paperId: string }) {
   const router = useRouter();
@@ -33,6 +43,7 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
   const [editForm, setEditForm] = useState({
     title: "", abstract: "", authors: "", co_authors: "",
     journal: "", conference: "", doi: "", publication_date: "",
@@ -119,8 +130,12 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
         doi: editForm.doi || undefined,
         publication_date: editForm.publication_date || undefined,
       });
+      if (replacementFile) {
+        await apiClient.replaceMediaFile(paper.item_id, replacementFile);
+      }
       toast.success("Paper updated successfully");
       setEditOpen(false);
+      setReplacementFile(null);
       await loadPaper();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update paper");
@@ -152,13 +167,14 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
     );
   }
 
+  const derivedStatus = deriveStatus(paper);
   const isAuthor = user?.user_id === paper.created_by;
   const isReviewer = user?.role_tier === "researcher" && !isAuthor;
   const isAdmin = user?.role_tier === "administrator" || user?.role_tier === "librarian";
   const canEdit = isAuthor || isAdmin;
   const canSubmitForReview = isAuthor && paper.status === "draft";
   const canPublish = isAuthor && paper.status === "review" && paper.reviewer_id != null;
-  const canReview = (isReviewer || isAdmin) && paper.status === "review";
+  const canReview = (isReviewer || isAdmin) && paper.status === "review" && !paper.reviewer_id;
 
   return (
     <div className="container px-4 py-8 max-w-4xl mx-auto space-y-6">
@@ -174,7 +190,7 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
           )}
           {canSubmitForReview && (
             <Button onClick={handleSubmitForReview} disabled={isSaving}>
-              <Send className="h-4 w-4 mr-2" /> Submit for Review
+              <Send className="h-4 w-4 mr-2" /> {derivedStatus === "rejected" ? "Resubmit for Review" : "Submit for Review"}
             </Button>
           )}
           {canPublish && (
@@ -196,8 +212,8 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
               <FileText className="h-6 w-6 text-primary" />
             </div>
-            <Badge variant={statusConfig[paper.status]?.variant ?? "secondary"}>
-              {statusConfig[paper.status]?.label ?? paper.status}
+            <Badge variant={statusConfig[derivedStatus]?.variant ?? "secondary"}>
+              {statusConfig[derivedStatus]?.label ?? derivedStatus}
             </Badge>
           </div>
           <CardTitle className="text-2xl">{paper.title}</CardTitle>
@@ -316,6 +332,19 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
               <Label>DOI</Label>
               <Input value={editForm.doi} onChange={e => setEditForm(f => ({ ...f, doi: e.target.value }))} placeholder="Optional" />
             </div>
+            {isAuthor && (
+              <div className="space-y-1">
+                <Label>Replace Paper File (PDF/DOCX, optional)</Label>
+                <Input
+                  type="file"
+                  accept=".pdf,.docx,.doc"
+                  onChange={e => setReplacementFile(e.target.files?.[0] ?? null)}
+                />
+                {replacementFile && (
+                  <p className="text-xs text-muted-foreground">New file: {replacementFile.name}</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>

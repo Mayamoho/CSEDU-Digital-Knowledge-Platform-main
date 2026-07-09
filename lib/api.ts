@@ -53,6 +53,9 @@ export interface MediaItem {
   external_url?: string | null;
   paper_id?: string;
   project_id?: string;
+  reviewer_id?: string;
+  review_notes?: string;
+  reviewed_at?: string;
   metadata?: MediaMetadata;
 }
 
@@ -210,6 +213,15 @@ export interface SearchParams {
 class APIClient {
   private accessToken: string | null = null;
 
+  constructor() {
+    // Restore the token synchronously on the client so requests fired by
+    // components that mount before AuthProvider's effect runs (e.g. research
+    // grid/detail views) are still authenticated.
+    if (typeof window !== 'undefined') {
+      this.accessToken = localStorage.getItem('csedu_access_token');
+    }
+  }
+
   setAccessToken(token: string | null) {
     this.accessToken = token;
   }
@@ -327,6 +339,26 @@ class APIClient {
       throw new Error(error.message || 'Upload failed');
     }
 
+    return response.json();
+  }
+
+  async replaceMediaFile(itemId: string, file: File): Promise<{ message: string; file_path: string; format: string }> {
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/media/${itemId}/file`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'File upload failed' }));
+      throw new Error(error.message || 'File upload failed');
+    }
     return response.json();
   }
 

@@ -32,7 +32,9 @@ function ResearchGridInner() {
     const fetchPapers = async () => {
       setIsLoading(true);
       try {
-        const response = await apiClient.listResearch();
+        // The public research page only shows published papers; drafts and
+        // papers under review live in My Uploads / the dashboard review queue.
+        const response = await apiClient.listResearch({ status: "published" });
         const data = response?.data || [];
         setPapers(Array.isArray(data) ? data : []);
         setTotal(response?.total || 0);

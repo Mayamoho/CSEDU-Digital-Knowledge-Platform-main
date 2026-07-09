@@ -24,6 +24,18 @@ const statusConfig = {
     color: "bg-yellow-100 text-yellow-700 border-yellow-200",
     description: "Being reviewed by librarian/researcher"
   },
+  accepted: {
+    label: "Accepted — Ready to Publish",
+    icon: CheckCircle,
+    color: "bg-blue-100 text-blue-700 border-blue-200",
+    description: "Accepted by a reviewer, publish to make it public"
+  },
+  rejected: {
+    label: "Rejected — Edit & Resubmit",
+    icon: AlertCircle,
+    color: "bg-red-100 text-red-700 border-red-200",
+    description: "Declined by a reviewer, edit and submit again"
+  },
   published: {
     label: "Published",
     icon: CheckCircle,
@@ -37,6 +49,17 @@ const statusConfig = {
     description: "Moved to archive"
   }
 };
+
+// Research papers carry review state on top of the raw media status:
+// accepted = still 'review' but a reviewer approved it (author must publish),
+// rejected = back to 'draft' with a completed review attached.
+function deriveStatus(item: MediaItem): keyof typeof statusConfig {
+  if (item.item_type === "research") {
+    if (item.status === "review" && item.reviewer_id) return "accepted";
+    if (item.status === "draft" && item.reviewed_at) return "rejected";
+  }
+  return item.status;
+}
 
 export function MyUploadsContent() {
   const { user, isAuthenticated } = useAuth();
@@ -97,37 +120,64 @@ export function MyUploadsContent() {
   }
 
   const UploadCard = ({ item }: { item: MediaItem }) => {
-    const config = statusConfig[item.status];
+    const derivedStatus = deriveStatus(item);
+    const config = statusConfig[derivedStatus] ?? statusConfig.draft;
     const StatusIcon = config.icon;
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const resolvePaperId = async (): Promise<string | undefined> => {
+      if (item.paper_id) return item.paper_id;
+      try {
+        const res = await apiClient.listResearch();
+        return res?.data?.find((p) => p.item_id === item.item_id)?.paper_id;
+      } catch (error) {
+        console.error("Failed to resolve research paper:", error);
+        return undefined;
+      }
+    };
+
+    const reloadUploads = async () => {
+      const response = await apiClient.getMyUploads({ per_page: 50 });
+      setUploads(response.data);
+    };
+
     const handleSubmitForReview = async () => {
-      if (!item.item_id) return;
-      
+      if (item.item_type !== 'research') return;
+
       setIsSubmitting(true);
       try {
-        // For research papers, we need to get the paper_id first
-        if (item.item_type === 'research') {
-          const papers = await apiClient.listResearch({ status: 'draft' });
-          if (!papers || !papers.data || papers.data.length === 0) {
-            toast.error("Failed to load research papers");
-            return;
-          }
-          const paper = papers.data.find((p: any) => p.item_id === item.item_id);
-          
-          if (paper) {
-            await apiClient.submitResearchForReview(paper.paper_id);
-            toast.success("Research paper submitted for review!");
-            // Reload uploads
-            const response = await apiClient.getMyUploads({ per_page: 50 });
-            setUploads(response.data);
-          } else {
-            toast.error("Research paper not found");
-          }
+        const paperId = await resolvePaperId();
+        if (!paperId) {
+          toast.error("Research paper not found");
+          return;
         }
+        await apiClient.submitResearchForReview(paperId);
+        toast.success("Research paper submitted for review!");
+        await reloadUploads();
       } catch (error) {
         console.error("Failed to submit for review:", error);
         toast.error(error instanceof Error ? error.message : "Failed to submit for review");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    const handlePublish = async () => {
+      if (item.item_type !== 'research') return;
+
+      setIsSubmitting(true);
+      try {
+        const paperId = await resolvePaperId();
+        if (!paperId) {
+          toast.error("Research paper not found");
+          return;
+        }
+        await apiClient.publishResearch(paperId);
+        toast.success("Research paper published! It's now visible on the Research page.");
+        await reloadUploads();
+      } catch (error) {
+        console.error("Failed to publish:", error);
+        toast.error(error instanceof Error ? error.message : "Failed to publish");
       } finally {
         setIsSubmitting(false);
       }
@@ -191,6 +241,11 @@ export function MyUploadsContent() {
           </div>
         </CardHeader>
         <CardContent>
+          {derivedStatus === 'rejected' && item.review_notes && (
+            <div className="mb-3 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-800">
+              <strong>Reviewer notes:</strong> {item.review_notes}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -204,9 +259,9 @@ export function MyUploadsContent() {
               <span className="capitalize">{item.item_type}</span>
             </div>
             <div className="flex gap-2">
-              {item.status === 'draft' && item.item_type === 'research' && (
-                <Button 
-                  variant="default" 
+              {item.item_type === 'research' && derivedStatus === 'draft' && (
+                <Button
+                  variant="default"
                   size="sm"
                   onClick={handleSubmitForReview}
                   disabled={isSubmitting}
@@ -214,8 +269,28 @@ export function MyUploadsContent() {
                   {isSubmitting ? "Submitting..." : "Submit for Review"}
                 </Button>
               )}
+              {item.item_type === 'research' && derivedStatus === 'rejected' && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSubmitForReview}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Submitting..." : "Resubmit for Review"}
+                </Button>
+              )}
+              {item.item_type === 'research' && derivedStatus === 'accepted' && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handlePublish}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Publishing..." : "Publish"}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleViewDetails}>
-                View Details
+                {derivedStatus === 'rejected' ? "Edit Paper" : "View Details"}
               </Button>
             </div>
           </div>

@@ -55,6 +55,9 @@ type mediaItemResponse struct {
 	UploadDate  string  `json:"upload_date"`
 	PaperID     *string `json:"paper_id,omitempty"`
 	ProjectID   *string `json:"project_id,omitempty"`
+	ReviewerID  *string `json:"reviewer_id,omitempty"`
+	ReviewNotes *string `json:"review_notes,omitempty"`
+	ReviewedAt  *string `json:"reviewed_at,omitempty"`
 }
 
 type mediaWithMeta struct {
@@ -135,7 +138,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default format for external-link-only submissions (no file uploaded).
-	ext := "link"
+	// Must be a value allowed by the chk_media_format DB constraint.
+	ext := "url"
 	var storedKey *string
 	if hasFile {
 		ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
@@ -534,9 +538,11 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT m.item_id, m.title, m.item_type, m.format, m.status, m.access_tier,
-		        m.created_by, m.file_path,
+		        m.created_by, m.file_path, m.external_url,
 		        to_char(m.upload_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-		        rp.paper_id, sp.project_id
+		        rp.paper_id, sp.project_id,
+		        rp.reviewer_id, rp.review_notes,
+		        to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		 FROM media_items m
 		 LEFT JOIN research_papers rp ON m.item_id = rp.item_id
 		 LEFT JOIN student_projects sp ON m.item_id = sp.item_id
@@ -553,8 +559,8 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var it mediaItemResponse
 		if err := rows.Scan(&it.ItemID, &it.Title, &it.ItemType, &it.Format,
-			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.UploadDate,
-			&it.PaperID, &it.ProjectID); err != nil {
+			&it.Status, &it.AccessTier, &it.CreatedBy, &it.FilePath, &it.ExternalURL, &it.UploadDate,
+			&it.PaperID, &it.ProjectID, &it.ReviewerID, &it.ReviewNotes, &it.ReviewedAt); err != nil {
 			continue
 		}
 		items = append(items, it)
@@ -566,5 +572,102 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 		"page":        page,
 		"per_page":    perPage,
 		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
+	})
+}
+
+// POST /api/v1/media/{itemId}/file — replace the stored file of an existing
+// media item (owner only). Used to re-upload a revised research paper PDF.
+func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id := chi.URLParam(r, "itemId")
+
+	var createdBy *string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT created_by FROM media_items WHERE item_id = $1`, id,
+	).Scan(&createdBy); err != nil {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+	if createdBy == nil || *createdBy != userID {
+		writeError(w, http.StatusForbidden, "you can only replace files on your own uploads")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize+1024)
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or invalid form data")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "a file is required")
+		return
+	}
+	defer file.Close()
+
+	if header.Size > maxUploadSize {
+		writeError(w, http.StatusBadRequest, "file exceeds 50 MB limit")
+		return
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+	allowedExts := map[string]bool{
+		"pdf": true, "docx": true, "doc": true, "pptx": true, "ppt": true,
+		"xlsx": true, "xls": true, "mp4": true, "mp3": true,
+		"jpg": true, "jpeg": true, "png": true, "gif": true,
+		"zip": true, "apk": true,
+	}
+	if !allowedExts[ext] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unsupported file format: %s", ext))
+		return
+	}
+	if ext == "jpeg" {
+		ext = "jpg"
+	}
+
+	objectKey := fmt.Sprintf("uploads/%s/%s.%s", userID, uuid.New().String(), ext)
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	key, uploadErr := h.minio.Upload(r.Context(), objectKey, contentType, file, header.Size)
+	if uploadErr != nil {
+		writeError(w, http.StatusInternalServerError, "file storage failed")
+		return
+	}
+
+	if _, err := h.db.Exec(r.Context(),
+		`UPDATE media_items SET file_path = $1, format = $2 WHERE item_id = $3`,
+		key, ext, id,
+	); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update media item")
+		return
+	}
+
+	// Re-queue ingestion so search/RAG picks up the new file content
+	if h.redis != nil {
+		jobData := map[string]any{
+			"item_id":   id,
+			"file_path": key,
+			"format":    ext,
+			"user_id":   userID,
+			"timestamp": time.Now().Format(time.RFC3339),
+		}
+		jobJSON, _ := json.Marshal(jobData)
+		if err := h.redis.LPush(r.Context(), "ingestion_jobs", jobJSON).Err(); err != nil {
+			fmt.Printf("Failed to queue ingestion job: %v\n", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message":   "file replaced successfully",
+		"file_path": key,
+		"format":    ext,
 	})
 }

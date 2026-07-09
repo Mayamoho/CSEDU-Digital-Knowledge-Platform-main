@@ -199,6 +199,7 @@ func main() {
 				r.Post("/upload", mediaHandler.Upload)
 				r.Get("/my-uploads", mediaHandler.MyUploads)
 				r.Patch("/{itemId}/metadata", mediaHandler.UpdateMetadata)
+				r.Post("/{itemId}/file", mediaHandler.ReplaceFile)
 			})
 		})
 
@@ -238,7 +239,7 @@ func main() {
 
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)
-				r.Use(middleware.RequireRole("researcher", "administrator"))
+				r.Use(middleware.RequireRole("student", "researcher", "administrator"))
 				r.Post("/", researchHandler.SubmitResearch)
 				r.Put("/{paperId}", researchHandler.UpdateResearch)
 				r.Post("/{paperId}/submit-for-review", researchHandler.SubmitForReview)

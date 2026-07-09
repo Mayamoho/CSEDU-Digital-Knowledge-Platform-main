@@ -232,7 +232,11 @@ export function DashboardContent() {
                       </div>
                     </div>
                     <Badge variant={item.status === "published" ? "default" : "secondary"}>
-                      {item.status === "published" ? "Published" : "In Review"}
+                      {item.status === "published" ? "Published"
+                        : item.status === "review" && item.reviewer_id ? "Ready to Publish"
+                        : item.status === "review" ? "In Review"
+                        : item.status === "draft" && item.reviewed_at ? "Rejected"
+                        : "Draft"}
                     </Badge>
                   </div>
                 ))}
