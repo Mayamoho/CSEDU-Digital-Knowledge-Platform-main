@@ -10,9 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { BookOpen, AlertCircle, Check, User, GraduationCap, FlaskConical, Book } from "lucide-react";
+import { BookOpen, AlertCircle, Check, GraduationCap } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
 
 const passwordRequirements = [
@@ -37,7 +36,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<RoleTier>("student");
+  // Self-registration is always Student; elevated roles are assigned by an
+  // administrator server-side. The API ignores any client-supplied role.
+  const role: RoleTier = "student";
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -133,53 +134,16 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="role">User Type</Label>
-                <Select value={role} onValueChange={(value: RoleTier) => setRole(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="student">
-                      <div className="flex items-center gap-2">
-                        <GraduationCap className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium">Student</div>
-                          <div className="text-xs text-muted-foreground">Undergrad/MSc/PhD</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="researcher">
-                      <div className="flex items-center gap-2">
-                        <FlaskConical className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium">Researcher</div>
-                          <div className="text-xs text-muted-foreground">Faculty & Researchers</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="librarian">
-                      <div className="flex items-center gap-2">
-                        <Book className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium">Librarian</div>
-                          <div className="text-xs text-muted-foreground">Library Administration</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="public">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium">Public User</div>
-                          <div className="text-xs text-muted-foreground">Limited Access</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {roleDescriptions[role]}
-                </p>
+                <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3">
+                  <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground">Registers as Student</p>
+                    <p>
+                      {roleDescriptions.student} Researcher, librarian, and administrator
+                      access is granted by an administrator after verification.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">

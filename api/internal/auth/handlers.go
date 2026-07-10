@@ -110,18 +110,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate and set role (default to 'student' as per SDD)
-	validRoles := map[string]bool{
-		"public":       true,
-		"student":      true,
-		"researcher":   true,
-		"librarian":    true,
-		"administrator": true,
-	}
-	role := req.Role
-	if role == "" || !validRoles[role] {
-		role = "student" // Default role as per SDD
-	}
+	// SECURITY: never trust a client-supplied role. Self-registration always
+	// yields the lowest self-serve tier ("student" per SDD). Elevated tiers
+	// (researcher/librarian/administrator) grant access to confidential/
+	// restricted content and may only be assigned by an administrator via
+	// PATCH /api/v1/admin/users/{userId}/role. req.Role is deliberately ignored.
+	role := "student"
 
 	// Bcrypt cost 12 as per SDD
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
