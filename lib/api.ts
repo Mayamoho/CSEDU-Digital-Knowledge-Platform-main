@@ -8,7 +8,7 @@ const getApiBaseUrl = () => {
     return process.env.INTERNAL_API_URL || 'http://api:8080/api/v1';
   }
   // Client-side (in browser)
-  return process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();
