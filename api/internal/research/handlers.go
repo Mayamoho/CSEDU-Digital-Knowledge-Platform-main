@@ -197,9 +197,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	// Special case: researchers can see papers pending review (excluding their own)
 	if forReview && roleTier == "researcher" {
 		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-		                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+		                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		         FROM research_papers rp
 		         JOIN media_items m ON rp.item_id = m.item_id
 		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -210,9 +210,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 		// Can see all papers
 		if status != "" {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
 			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -221,9 +221,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 			args = append(args, status)
 		} else {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
 			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -233,9 +233,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 		// Authenticated non-researcher: see published + own papers
 		if status != "" {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
 			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -244,9 +244,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 			args = append(args, userID, status)
 		} else {
 			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			         FROM research_papers rp
 			         JOIN media_items m ON rp.item_id = m.item_id
 			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -257,9 +257,9 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Unauthenticated: only published papers
 		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-		                rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+		                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		         FROM research_papers rp
 		         JOIN media_items m ON rp.item_id = m.item_id
 		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -311,9 +311,9 @@ func (h *Handler) GetResearch(w http.ResponseWriter, r *http.Request) {
 	var p ResearchPaper
 	err := h.db.QueryRow(r.Context(),
 		`SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		        COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), rp.publication_date, rp.doi, rp.journal, 
+		        COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
 		        rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-		        rp.submitted_at, rp.reviewer_id, rp.review_notes, rp.reviewed_at
+		        rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		 FROM research_papers rp
 		 JOIN media_items m ON rp.item_id = m.item_id
 		 LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
@@ -650,7 +650,8 @@ func (h *Handler) PublishResearch(w http.ResponseWriter, r *http.Request) {
 	var reviewerID *string
 	var reviewedAt *string
 	err = tx.QueryRow(ctx,
-		`SELECT rp.item_id, m.created_by, rp.reviewer_id, rp.reviewed_at
+		`SELECT rp.item_id, m.created_by, rp.reviewer_id,
+		        to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		 FROM research_papers rp
 		 JOIN media_items m ON m.item_id = rp.item_id
 		 WHERE rp.paper_id = $1`,
