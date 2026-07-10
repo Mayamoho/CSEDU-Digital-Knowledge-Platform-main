@@ -137,32 +137,37 @@ export function ProfileContent() {
             </CardContent>
           </Card>
         )}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500/10">
-                <BookOpen className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.totalLoans}</p>
-                <p className="text-sm text-muted-foreground">Total Loans</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500/10">
-                <Clock className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.activeLoans}</p>
-                <p className="text-sm text-muted-foreground">Active Loans</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Loan stats are personal borrowing figures — not relevant to librarians */}
+        {!isLibrarian && (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500/10">
+                    <BookOpen className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalLoans}</p>
+                    <p className="text-sm text-muted-foreground">Total Loans</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500/10">
+                    <Clock className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.activeLoans}</p>
+                    <p className="text-sm text-muted-foreground">Active Loans</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Contributions */}
@@ -215,7 +220,8 @@ export function ProfileContent() {
       </Card>
       )}
 
-      {/* Borrowing History */}
+      {/* Borrowing History — librarians don't borrow, so hide it for them */}
+      {!isLibrarian && (
       <Card>
         <CardHeader>
           <CardTitle>Borrowing History</CardTitle>
@@ -251,6 +257,7 @@ export function ProfileContent() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

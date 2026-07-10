@@ -417,60 +417,68 @@ function LibrarianDashboard() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — clickable, routed to the loans/fines pages */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <BookOpen className="h-5 w-5" />
+        <Link href="/loans">
+          <Card className="transition-shadow hover:shadow-md cursor-pointer">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Active Loans</p>
+                  <p className="text-2xl font-semibold">{activeLoans.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active Loans</p>
-                <p className="text-2xl font-semibold">{activeLoans.length}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/fines">
+          <Card className="transition-shadow hover:shadow-md cursor-pointer">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Overdue Items</p>
+                  <p className="text-2xl font-semibold">{overdueLoans.length}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/loans">
+          <Card className="transition-shadow hover:shadow-md cursor-pointer">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Members</p>
+                  <p className="text-2xl font-semibold">{new Set(allLoans.map(l => l.user_id)).size}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Overdue Items</p>
-                <p className="text-2xl font-semibold">{overdueLoans.length}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/loans">
+          <Card className="transition-shadow hover:shadow-md cursor-pointer">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 text-green-600">
+                  <Library className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Loans</p>
+                  <p className="text-2xl font-semibold">{allLoans.length}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
-                <User className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Members</p>
-                <p className="text-2xl font-semibold">{new Set(allLoans.map(l => l.user_id)).size}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 text-green-600">
-                <Library className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Loans</p>
-                <p className="text-2xl font-semibold">{allLoans.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Quick Actions */}

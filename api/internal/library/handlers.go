@@ -471,6 +471,61 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/v1/library/fines/all — list every member's fines (librarian/admin)
+func (h *Handler) ListAllFines(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT f.fine_id, f.loan_id, f.user_id, u.name, u.email,
+		        f.amount, f.status,
+		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        c.title
+		 FROM fines f
+		 JOIN users u ON u.user_id = f.user_id
+		 JOIN loans l ON l.loan_id = f.loan_id
+		 JOIN library_catalog c ON c.catalog_id = l.catalog_id
+		 ORDER BY f.calculated_at DESC`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+
+	type fineItem struct {
+		FineID    string  `json:"fine_id"`
+		LoanID    string  `json:"loan_id"`
+		UserID    string  `json:"user_id"`
+		UserName  string  `json:"user_name"`
+		UserEmail string  `json:"user_email"`
+		AmountBDT float64 `json:"amount_bdt"`
+		Paid      bool    `json:"paid"`
+		Waived    bool    `json:"waived"`
+		CreatedAt string  `json:"created_at"`
+		Title     string  `json:"title"`
+	}
+	fines := []fineItem{}
+	totalPending := 0.0
+
+	for rows.Next() {
+		var f fineItem
+		var status string
+		if err := rows.Scan(&f.FineID, &f.LoanID, &f.UserID, &f.UserName, &f.UserEmail,
+			&f.AmountBDT, &status, &f.CreatedAt, &f.Title); err != nil {
+			continue
+		}
+		f.Paid = (status == "paid")
+		f.Waived = (status == "waived")
+		if status == "pending" {
+			totalPending += f.AmountBDT
+		}
+		fines = append(fines, f)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":             fines,
+		"total":            len(fines),
+		"total_unpaid_bdt": totalPending,
+	})
+}
+
 // POST /api/v1/library/fines/{fineId}/pay — record fine payment
 func (h *Handler) PayFine(w http.ResponseWriter, r *http.Request) {
 	fineID := chi.URLParam(r, "fineId")

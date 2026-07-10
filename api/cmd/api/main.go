@@ -160,8 +160,9 @@ func main() {
 				r.Use(middleware.Authenticate)
 				r.Get("/", libraryHandler.ListFines)
 				r.Post("/{fineId}/pay", libraryHandler.PayFine)
-				
+
 				// Staff/admin only
+				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllFines)
 				r.With(middleware.RequireRole("librarian", "administrator")).Post("/{fineId}/waive", libraryHandler.WaiveFine)
 			})
 		})

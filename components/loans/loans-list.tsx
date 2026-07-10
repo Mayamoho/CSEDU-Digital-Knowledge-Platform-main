@@ -1,15 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiClient, type LoanItem } from "@/lib/api";
+import { apiClient, type LoanItem, type AdminLoanItem } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, Calendar, AlertCircle, CheckCircle } from "lucide-react";
+import { BookOpen, Calendar, AlertCircle, CheckCircle, User } from "lucide-react";
 import { toast } from "sonner";
 
 export function LoansList() {
+  const { user } = useAuth();
+  // Librarians and admins see every member's loans, not their own.
+  if (user?.role_tier === "librarian" || user?.role_tier === "administrator") {
+    return <AllLoansView />;
+  }
+  return <MyLoansList />;
+}
+
+function MyLoansList() {
   const [loans, setLoans] = useState<LoanItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [returningId, setReturningId] = useState<string | null>(null);
@@ -166,6 +176,152 @@ export function LoansList() {
                       <p className="font-medium">{loan.title}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(loan.checkout_date).toLocaleDateString()} - {loan.return_date && new Date(loan.return_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary">Returned</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Librarian/admin view: every member's loans across the library.
+function AllLoansView() {
+  const [loans, setLoans] = useState<AdminLoanItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await apiClient.adminListLoans({ per_page: 100 });
+        setLoans(res.data);
+      } catch (error) {
+        console.error("Failed to load loans:", error);
+        toast.error("Failed to load loans");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)}
+      </div>
+    );
+  }
+
+  const activeLoans = loans.filter((l) => l.status === "active" || l.status === "overdue");
+  const returnedLoans = loans.filter((l) => l.status === "returned");
+
+  const borrowerLine = (loan: AdminLoanItem) => loan.user_name || loan.user_email;
+
+  return (
+    <div className="space-y-6">
+      {/* Currently borrowed */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5" />
+            Currently Borrowed ({activeLoans.length})
+          </CardTitle>
+          <CardDescription>All books members currently have out, with due dates</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activeLoans.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No active loans</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activeLoans.map((loan) => {
+                const isOverdue = loan.status === "overdue";
+                const dueDate = new Date(loan.due_date);
+                return (
+                  <div
+                    key={loan.loan_id}
+                    className={`p-4 rounded-lg border ${isOverdue ? "border-destructive bg-destructive/5" : "border-border"}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                          <BookOpen className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold">{loan.title}</h3>
+                          <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              <span>{borrowerLine(loan)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              <span>Borrowed: {new Date(loan.checkout_date).toLocaleDateString()}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isOverdue ? (
+                                <>
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                  <span className="text-destructive font-medium">
+                                    Overdue since {dueDate.toLocaleDateString()}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Calendar className="h-4 w-4" />
+                                  <span>Due: {dueDate.toLocaleDateString()}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant={isOverdue ? "destructive" : "default"}>
+                        {isOverdue ? "Overdue" : "Active"}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Returned */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5" />
+            Returned Books ({returnedLoans.length})
+          </CardTitle>
+          <CardDescription>Books members have returned</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {returnedLoans.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No returned books</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {returnedLoans.map((loan) => (
+                <div key={loan.loan_id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">{loan.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {borrowerLine(loan)} • {new Date(loan.checkout_date).toLocaleDateString()}
+                        {loan.return_date && ` - ${new Date(loan.return_date).toLocaleDateString()}`}
                       </p>
                     </div>
                   </div>

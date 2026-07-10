@@ -112,6 +112,24 @@ export interface Fine {
   due_date?: string;
 }
 
+export interface AdminFine extends Fine {
+  user_name: string;
+  user_email: string;
+}
+
+export interface AddedBook {
+  catalog_id: string;
+  title: string;
+  author: string;
+  isbn?: string;
+  format?: string;
+  available_copies: number;
+  total_copies: number;
+  location?: string;
+  cover_image?: string;
+  year?: number;
+}
+
 export interface Payment {
   payment_id: string;
   fine_id: string;
@@ -468,9 +486,21 @@ class APIClient {
     return this.request(`/library/loans/all?${sp.toString()}`);
   }
 
+  // Librarian: books this librarian has added to the catalog
+  async getMyAddedBooks(params: { page?: number; per_page?: number } = {}): Promise<{ data: AddedBook[]; total: number }> {
+    const sp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined) sp.append(k, String(v)); });
+    return this.request(`/library/catalog/my-books?${sp.toString()}`);
+  }
+
   // Fines
   async getMyFines(): Promise<{ data: Fine[]; total: number; total_unpaid_bdt: number }> {
     return this.request('/library/fines');
+  }
+
+  // Librarian/admin: every member's fines
+  async adminListFines(): Promise<{ data: AdminFine[]; total: number; total_unpaid_bdt: number }> {
+    return this.request('/library/fines/all');
   }
 
   async payFine(fineId: string, paymentMethod: string = 'cash'): Promise<{ message: string; payment: Payment }> {

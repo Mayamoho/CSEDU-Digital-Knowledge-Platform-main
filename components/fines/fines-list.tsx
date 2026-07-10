@@ -7,11 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { AlertCircle, CheckCircle, CreditCard, DollarSign } from "lucide-react";
-import { apiClient, Fine } from "@/lib/api";
+import { apiClient, Fine, type AdminFine } from "@/lib/api";
 import { useRoleCheck } from "@/components/auth/role-gate";
+import { useAuth } from "@/lib/auth-context";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { User } from "lucide-react";
 
 export function FinesList() {
+  const { user } = useAuth();
+  // Librarians and admins see every member's fines, not their own.
+  if (user?.role_tier === "librarian" || user?.role_tier === "administrator") {
+    return <AllFinesView />;
+  }
+  return <MyFinesList />;
+}
+
+function MyFinesList() {
   const [fines, setFines] = useState<Fine[]>([]);
   const [totalUnpaid, setTotalUnpaid] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -242,6 +253,186 @@ export function FinesList() {
           </ul>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// Librarian/admin view: every member's fines across the library.
+function AllFinesView() {
+  const [fines, setFines] = useState<AdminFine[]>([]);
+  const [totalUnpaid, setTotalUnpaid] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadFines();
+  }, []);
+
+  const loadFines = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await apiClient.adminListFines();
+      setFines(res.data);
+      setTotalUnpaid(res.total_unpaid_bdt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load fines");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWaive = async (fineId: string) => {
+    if (!confirm("Waive this fine?")) return;
+    try {
+      setBusyId(fineId);
+      await apiClient.waiveFine(fineId);
+      await loadFines();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to waive fine");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  const outstanding = fines.filter((f) => !f.paid && !f.waived);
+  const settled = fines.filter((f) => f.paid || f.waived);
+  const borrower = (f: AdminFine) => f.user_name || f.user_email;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            Fines Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-lg bg-muted">
+              <p className="text-sm text-muted-foreground">Total Fines</p>
+              <p className="text-2xl font-bold">{fines.length}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-destructive/10">
+              <p className="text-sm text-muted-foreground">Outstanding</p>
+              <p className="text-2xl font-bold text-destructive">{outstanding.length}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-destructive/10">
+              <p className="text-sm text-muted-foreground">Total Unpaid Amount</p>
+              <p className="text-2xl font-bold text-destructive">৳{totalUnpaid.toFixed(2)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Outstanding fines */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            Outstanding Member Fines
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {outstanding.length === 0 ? (
+            <Empty>
+              <EmptyMedia variant="icon">
+                <CheckCircle className="h-6 w-6 text-green-500" />
+              </EmptyMedia>
+              <EmptyTitle>No Outstanding Fines</EmptyTitle>
+              <EmptyDescription>No member currently owes a fine.</EmptyDescription>
+            </Empty>
+          ) : (
+            <div className="space-y-4">
+              {outstanding.map((fine) => (
+                <div
+                  key={fine.fine_id}
+                  className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5"
+                >
+                  <div className="flex-1">
+                    <h3 className="font-medium">{fine.title || `Loan ${fine.loan_id}`}</h3>
+                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      {borrower(fine)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Created: {new Date(fine.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-destructive">৳{fine.amount_bdt.toFixed(2)}</p>
+                      <Badge variant="destructive">Unpaid</Badge>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleWaive(fine.fine_id)}
+                      disabled={busyId === fine.fine_id}
+                    >
+                      {busyId === fine.fine_id ? "Waiving..." : "Waive Fine"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Settled */}
+      {settled.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Paid / Waived
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {settled.map((fine) => (
+                <div
+                  key={fine.fine_id}
+                  className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/50"
+                >
+                  <div className="flex-1">
+                    <h3 className="font-medium text-sm">{fine.title || `Loan ${fine.loan_id}`}</h3>
+                    <p className="text-xs text-muted-foreground">{borrower(fine)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">৳{fine.amount_bdt.toFixed(2)}</p>
+                    <Badge variant={fine.paid ? "default" : "secondary"} className="text-xs">
+                      {fine.paid ? "Paid" : "Waived"}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
