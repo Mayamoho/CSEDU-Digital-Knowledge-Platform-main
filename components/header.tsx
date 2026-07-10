@@ -170,6 +170,15 @@ export function Header() {
                     </Link>
                   </DropdownMenuItem>
                 )}
+                {/* Administrator-only: manage user roles */}
+                {user.role_tier === 'administrator' && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/users" className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      Manage Roles
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link href="/profile" className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />

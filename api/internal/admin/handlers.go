@@ -98,7 +98,7 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	validRoles := map[string]bool{
-		"public": true, "member": true, "staff": true, "admin": true, "ai_admin": true,
+		"public": true, "student": true, "researcher": true, "librarian": true, "administrator": true,
 	}
 	if !validRoles[req.RoleTier] {
 		writeError(w, http.StatusBadRequest, "invalid role_tier")
