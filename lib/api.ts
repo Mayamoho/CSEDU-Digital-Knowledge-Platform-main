@@ -110,11 +110,38 @@ export interface Fine {
   waived_by: string | null;
   title?: string;
   due_date?: string;
+  // A live payment session, if the member has started paying this fine.
+  pending_method?: string | null;   // bkash | nagad | cash
+  pending_status?: string | null;   // otp_sent | awaiting_counter
 }
 
 export interface AdminFine extends Fine {
   user_name: string;
   user_email: string;
+}
+
+// Result of starting a bKash/Nagad online payment (OTP challenge).
+export interface InitiatePaymentResult {
+  session_id: string;
+  method: string;
+  masked_account: string;
+  amount_bdt: number;
+  otp_expires_in: number;
+  message: string;
+  demo_otp?: string;        // present only in the simulated gateway
+  demo_disclaimer?: string;
+}
+
+// A fine a member has asked to pay in person, awaiting librarian confirmation.
+export interface CashRequest {
+  session_id: string;
+  fine_id: string;
+  amount_bdt: number;
+  created_at: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  title: string;
 }
 
 export interface AddedBook {
@@ -503,11 +530,53 @@ class APIClient {
     return this.request('/library/fines/all');
   }
 
-  async payFine(fineId: string, paymentMethod: string = 'cash'): Promise<{ message: string; payment: Payment }> {
-    return this.request(`/library/fines/${fineId}/pay`, {
+  // ── Fine payment: bKash/Nagad (OTP) + in-person cash ──────────────────────
+
+  // Start an online payment; server "sends" an OTP to the wallet number.
+  async initiateOnlinePayment(
+    fineId: string,
+    method: 'bkash' | 'nagad',
+    accountNumber: string,
+  ): Promise<InitiatePaymentResult> {
+    return this.request(`/library/fines/${fineId}/pay/initiate`, {
       method: 'POST',
-      body: JSON.stringify({ payment_method: paymentMethod }),
+      body: JSON.stringify({ method, account_number: accountNumber }),
     });
+  }
+
+  // Verify the OTP and settle the fine.
+  async confirmOnlinePayment(
+    fineId: string,
+    sessionId: string,
+    otp: string,
+  ): Promise<{ status: string; method: string; amount_bdt: number; message: string }> {
+    return this.request(`/library/fines/${fineId}/pay/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId, otp }),
+    });
+  }
+
+  // Flag a fine to be paid in person; a librarian confirms it later.
+  async requestCashPayment(
+    fineId: string,
+  ): Promise<{ session_id: string; status: string; amount_bdt: number; message: string }> {
+    return this.request(`/library/fines/${fineId}/pay/cash`, { method: 'POST' });
+  }
+
+  async cancelPaymentSession(fineId: string): Promise<{ message: string }> {
+    return this.request(`/library/fines/${fineId}/pay/cancel`, { method: 'POST' });
+  }
+
+  // Librarian/admin: fines awaiting in-person payment confirmation.
+  async listCashRequests(): Promise<{ data: CashRequest[]; total: number }> {
+    return this.request('/library/fines/cash-requests');
+  }
+
+  // Librarian/admin: confirm cash received at the counter, settling the fine.
+  async confirmCashPayment(
+    fineId: string,
+  ): Promise<{ status: string; method: string; amount_bdt: number; message: string }> {
+    return this.request(`/library/fines/${fineId}/confirm-cash`, { method: 'POST' });
   }
 
   async waiveFine(fineId: string, reason?: string): Promise<{ message: string }> {

@@ -444,10 +444,16 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT f.fine_id, f.loan_id, f.amount::float8, f.status,
-		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), c.title
+		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), c.title,
+		        ps.method, ps.status
 		 FROM fines f
 		 JOIN loans l ON l.loan_id = f.loan_id
 		 JOIN library_catalog c ON c.catalog_id = l.catalog_id
+		 LEFT JOIN LATERAL (
+		     SELECT method, status FROM payment_sessions s
+		     WHERE s.fine_id = f.fine_id AND s.status IN ('otp_sent','awaiting_counter')
+		     ORDER BY s.created_at DESC LIMIT 1
+		 ) ps ON true
 		 WHERE f.user_id = $1
 		 ORDER BY f.calculated_at DESC`, userID)
 	if err != nil {
@@ -457,13 +463,15 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type fineItem struct {
-		FineID    string  `json:"fine_id"`
-		LoanID    string  `json:"loan_id"`
-		AmountBDT float64 `json:"amount_bdt"`
-		Paid      bool    `json:"paid"`
-		Waived    bool    `json:"waived"`
-		CreatedAt string  `json:"created_at"`
-		Title     string  `json:"title"`
+		FineID        string  `json:"fine_id"`
+		LoanID        string  `json:"loan_id"`
+		AmountBDT     float64 `json:"amount_bdt"`
+		Paid          bool    `json:"paid"`
+		Waived        bool    `json:"waived"`
+		CreatedAt     string  `json:"created_at"`
+		Title         string  `json:"title"`
+		PendingMethod *string `json:"pending_method"`
+		PendingStatus *string `json:"pending_status"`
 	}
 	fines := []fineItem{}
 	totalPending := 0.0
@@ -471,7 +479,8 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var f fineItem
 		var status string
-		if err := rows.Scan(&f.FineID, &f.LoanID, &f.AmountBDT, &status, &f.CreatedAt, &f.Title); err != nil {
+		if err := rows.Scan(&f.FineID, &f.LoanID, &f.AmountBDT, &status, &f.CreatedAt, &f.Title,
+			&f.PendingMethod, &f.PendingStatus); err != nil {
 			continue
 		}
 		f.Paid = (status == "paid")
@@ -495,11 +504,16 @@ func (h *Handler) ListAllFines(w http.ResponseWriter, r *http.Request) {
 		`SELECT f.fine_id, f.loan_id, f.user_id, u.name, u.email,
 		        f.amount::float8, f.status,
 		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-		        c.title
+		        c.title, ps.method, ps.status
 		 FROM fines f
 		 JOIN users u ON u.user_id = f.user_id
 		 JOIN loans l ON l.loan_id = f.loan_id
 		 JOIN library_catalog c ON c.catalog_id = l.catalog_id
+		 LEFT JOIN LATERAL (
+		     SELECT method, status FROM payment_sessions s
+		     WHERE s.fine_id = f.fine_id AND s.status IN ('otp_sent','awaiting_counter')
+		     ORDER BY s.created_at DESC LIMIT 1
+		 ) ps ON true
 		 ORDER BY f.calculated_at DESC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -508,16 +522,18 @@ func (h *Handler) ListAllFines(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type fineItem struct {
-		FineID    string  `json:"fine_id"`
-		LoanID    string  `json:"loan_id"`
-		UserID    string  `json:"user_id"`
-		UserName  string  `json:"user_name"`
-		UserEmail string  `json:"user_email"`
-		AmountBDT float64 `json:"amount_bdt"`
-		Paid      bool    `json:"paid"`
-		Waived    bool    `json:"waived"`
-		CreatedAt string  `json:"created_at"`
-		Title     string  `json:"title"`
+		FineID        string  `json:"fine_id"`
+		LoanID        string  `json:"loan_id"`
+		UserID        string  `json:"user_id"`
+		UserName      string  `json:"user_name"`
+		UserEmail     string  `json:"user_email"`
+		AmountBDT     float64 `json:"amount_bdt"`
+		Paid          bool    `json:"paid"`
+		Waived        bool    `json:"waived"`
+		CreatedAt     string  `json:"created_at"`
+		Title         string  `json:"title"`
+		PendingMethod *string `json:"pending_method"`
+		PendingStatus *string `json:"pending_status"`
 	}
 	fines := []fineItem{}
 	totalPending := 0.0
@@ -526,7 +542,7 @@ func (h *Handler) ListAllFines(w http.ResponseWriter, r *http.Request) {
 		var f fineItem
 		var status string
 		if err := rows.Scan(&f.FineID, &f.LoanID, &f.UserID, &f.UserName, &f.UserEmail,
-			&f.AmountBDT, &status, &f.CreatedAt, &f.Title); err != nil {
+			&f.AmountBDT, &status, &f.CreatedAt, &f.Title, &f.PendingMethod, &f.PendingStatus); err != nil {
 			continue
 		}
 		f.Paid = (status == "paid")

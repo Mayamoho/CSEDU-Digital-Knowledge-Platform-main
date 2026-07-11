@@ -161,8 +161,17 @@ func main() {
 				r.Get("/", libraryHandler.ListFines)
 				r.Post("/{fineId}/pay", libraryHandler.PayFine)
 
+				// bKash/Nagad online payment with OTP
+				r.Post("/{fineId}/pay/initiate", libraryHandler.InitiateOnlinePayment)
+				r.Post("/{fineId}/pay/confirm", libraryHandler.ConfirmOnlinePayment)
+				// In-person cash payment request + cancel
+				r.Post("/{fineId}/pay/cash", libraryHandler.RequestCashPayment)
+				r.Post("/{fineId}/pay/cancel", libraryHandler.CancelPaymentSession)
+
 				// Staff/admin only
 				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllFines)
+				r.With(middleware.RequireRole("librarian", "administrator")).Get("/cash-requests", libraryHandler.ListCashRequests)
+				r.With(middleware.RequireRole("librarian", "administrator")).Post("/{fineId}/confirm-cash", libraryHandler.ConfirmCashPayment)
 				r.With(middleware.RequireRole("librarian", "administrator")).Post("/{fineId}/waive", libraryHandler.WaiveFine)
 			})
 		})

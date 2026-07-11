@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { AlertCircle, CheckCircle, CreditCard, DollarSign } from "lucide-react";
-import { apiClient, Fine, type AdminFine } from "@/lib/api";
-import { useRoleCheck } from "@/components/auth/role-gate";
+import { AlertCircle, CheckCircle, CreditCard, DollarSign, Clock, Banknote, User } from "lucide-react";
+import { apiClient, Fine, type AdminFine, type CashRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User } from "lucide-react";
+import { PayFineDialog } from "@/components/fines/pay-fine-dialog";
 
 export function FinesList() {
   const { user } = useAuth();
@@ -22,15 +22,19 @@ export function FinesList() {
   return <MyFinesList />;
 }
 
+function methodLabel(m?: string | null) {
+  if (m === "bkash") return "bKash";
+  if (m === "nagad") return "Nagad";
+  if (m === "cash") return "counter";
+  return m ?? "";
+}
+
 function MyFinesList() {
   const [fines, setFines] = useState<Fine[]>([]);
   const [totalUnpaid, setTotalUnpaid] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [payingFineId, setPayingFineId] = useState<string | null>(null);
-  const { checkPermission } = useRoleCheck();
-
-  const canWaiveFines = checkPermission('manage_fines');
+  const [payFine, setPayFine] = useState<Fine | null>(null);
 
   useEffect(() => {
     loadFines();
@@ -48,33 +52,6 @@ function MyFinesList() {
       setError(err instanceof Error ? err.message : "Failed to load fines");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handlePayFine = async (fineId: string) => {
-    try {
-      setPayingFineId(fineId);
-      await apiClient.payFine(fineId, 'cash');
-      await loadFines(); // Reload to get updated data
-    } catch (err) {
-      console.error("Failed to pay fine:", err);
-      alert(err instanceof Error ? err.message : "Failed to pay fine");
-    } finally {
-      setPayingFineId(null);
-    }
-  };
-
-  const handleWaiveFine = async (fineId: string) => {
-    if (!confirm("Are you sure you want to waive this fine?")) {
-      return;
-    }
-
-    try {
-      await apiClient.waiveFine(fineId);
-      await loadFines();
-    } catch (err) {
-      console.error("Failed to waive fine:", err);
-      alert(err instanceof Error ? err.message : "Failed to waive fine");
     }
   };
 
@@ -97,8 +74,8 @@ function MyFinesList() {
     );
   }
 
-  const unpaidFines = fines.filter(f => !f.paid && !f.waived);
-  const paidFines = fines.filter(f => f.paid || f.waived);
+  const unpaidFines = fines.filter((f) => !f.paid && !f.waived);
+  const paidFines = fines.filter((f) => f.paid || f.waived);
 
   return (
     <div className="space-y-6">
@@ -149,54 +126,49 @@ function MyFinesList() {
             </Empty>
           ) : (
             <div className="space-y-4">
-              {unpaidFines.map((fine) => (
-                <div
-                  key={fine.fine_id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5"
-                >
-                  <div className="flex-1">
-                    <h3 className="font-medium">{fine.title || `Loan ${fine.loan_id}`}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Fine ID: {fine.fine_id}
-                    </p>
-                    {fine.due_date && (
+              {unpaidFines.map((fine) => {
+                const awaitingCounter = fine.pending_status === "awaiting_counter";
+                return (
+                  <div
+                    key={fine.fine_id}
+                    className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5"
+                  >
+                    <div className="flex-1">
+                      <h3 className="font-medium">{fine.title || `Loan ${fine.loan_id}`}</h3>
+                      {fine.due_date && (
+                        <p className="text-sm text-muted-foreground">
+                          Due Date: {new Date(fine.due_date).toLocaleDateString()}
+                        </p>
+                      )}
                       <p className="text-sm text-muted-foreground">
-                        Due Date: {new Date(fine.due_date).toLocaleDateString()}
+                        Created: {new Date(fine.created_at).toLocaleDateString()}
                       </p>
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      Created: {new Date(fine.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-destructive">
-                        ৳{fine.amount_bdt.toFixed(2)}
-                      </p>
-                      <Badge variant="destructive">Unpaid</Badge>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handlePayFine(fine.fine_id)}
-                        disabled={payingFineId === fine.fine_id}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        {payingFineId === fine.fine_id ? "Processing..." : "Pay Now"}
-                      </Button>
-                      {canWaiveFines && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleWaiveFine(fine.fine_id)}
-                        >
-                          Waive Fine
-                        </Button>
+                      {awaitingCounter && (
+                        <p className="mt-1 flex items-center gap-1 text-sm text-amber-600">
+                          <Clock className="h-3.5 w-3.5" />
+                          Awaiting librarian confirmation at counter
+                        </p>
                       )}
                     </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-destructive">
+                          ৳{fine.amount_bdt.toFixed(2)}
+                        </p>
+                        {awaitingCounter ? (
+                          <Badge variant="secondary">Counter payment</Badge>
+                        ) : (
+                          <Badge variant="destructive">Unpaid</Badge>
+                        )}
+                      </div>
+                      <Button size="sm" onClick={() => setPayFine(fine)}>
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        {awaitingCounter ? "Pay online instead" : "Pay Now"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -248,34 +220,48 @@ function MyFinesList() {
             <li>Overdue fines are calculated at ৳50.00 per day</li>
             <li>Maximum fine per loan is capped at ৳500.00</li>
             <li>Fines must be paid before borrowing new items</li>
+            <li>Pay online via bKash or Nagad (OTP), or in cash at the library counter</li>
             <li>Contact library staff if you believe a fine was charged in error</li>
-            <li>Payment methods: Cash at library counter</li>
           </ul>
         </CardContent>
       </Card>
+
+      {payFine && (
+        <PayFineDialog
+          fine={payFine}
+          open={payFine !== null}
+          onOpenChange={(o) => !o && setPayFine(null)}
+          onSettled={loadFines}
+        />
+      )}
     </div>
   );
 }
 
-// Librarian/admin view: every member's fines across the library.
+// Librarian/admin view: every member's fines + in-person payment confirmations.
 function AllFinesView() {
   const [fines, setFines] = useState<AdminFine[]>([]);
+  const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
   const [totalUnpaid, setTotalUnpaid] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFines();
+    loadAll();
   }, []);
 
-  const loadFines = async () => {
+  const loadAll = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await apiClient.adminListFines();
+      const [res, cash] = await Promise.all([
+        apiClient.adminListFines(),
+        apiClient.listCashRequests(),
+      ]);
       setFines(res.data);
       setTotalUnpaid(res.total_unpaid_bdt);
+      setCashRequests(cash.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load fines");
     } finally {
@@ -284,13 +270,27 @@ function AllFinesView() {
   };
 
   const handleWaive = async (fineId: string) => {
-    if (!confirm("Waive this fine?")) return;
+    if (!window.confirm("Waive this fine? This clears it without payment.")) return;
     try {
       setBusyId(fineId);
       await apiClient.waiveFine(fineId);
-      await loadFines();
+      toast.success("Fine waived");
+      await loadAll();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to waive fine");
+      toast.error(err instanceof Error ? err.message : "Failed to waive fine");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleConfirmCash = async (fineId: string) => {
+    try {
+      setBusyId(fineId);
+      const res = await apiClient.confirmCashPayment(fineId);
+      toast.success(res.message);
+      await loadAll();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to confirm payment");
     } finally {
       setBusyId(null);
     }
@@ -329,7 +329,7 @@ function AllFinesView() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-lg bg-muted">
               <p className="text-sm text-muted-foreground">Total Fines</p>
               <p className="text-2xl font-bold">{fines.length}</p>
@@ -338,6 +338,10 @@ function AllFinesView() {
               <p className="text-sm text-muted-foreground">Outstanding</p>
               <p className="text-2xl font-bold text-destructive">{outstanding.length}</p>
             </div>
+            <div className="p-4 rounded-lg bg-amber-500/10">
+              <p className="text-sm text-muted-foreground">Counter Requests</p>
+              <p className="text-2xl font-bold text-amber-600">{cashRequests.length}</p>
+            </div>
             <div className="p-4 rounded-lg bg-destructive/10">
               <p className="text-sm text-muted-foreground">Total Unpaid Amount</p>
               <p className="text-2xl font-bold text-destructive">৳{totalUnpaid.toFixed(2)}</p>
@@ -345,6 +349,50 @@ function AllFinesView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* In-person cash requests awaiting confirmation */}
+      {cashRequests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-amber-600" />
+              Counter Payments to Confirm
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {cashRequests.map((req) => (
+                <div
+                  key={req.session_id}
+                  className="flex items-center justify-between p-4 rounded-lg border border-amber-500/30 bg-amber-500/5"
+                >
+                  <div className="flex-1">
+                    <h3 className="font-medium">{req.title}</h3>
+                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      {req.user_name || req.user_email}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Requested: {new Date(req.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="text-2xl font-bold text-amber-600">৳{req.amount_bdt.toFixed(2)}</p>
+                    <Button
+                      size="sm"
+                      onClick={() => handleConfirmCash(req.fine_id)}
+                      disabled={busyId === req.fine_id}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      {busyId === req.fine_id ? "Confirming…" : "Confirm Cash Received"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Outstanding fines */}
       <Card>
@@ -379,20 +427,43 @@ function AllFinesView() {
                     <p className="text-sm text-muted-foreground">
                       Created: {new Date(fine.created_at).toLocaleDateString()}
                     </p>
+                    {fine.pending_status === "awaiting_counter" && (
+                      <p className="mt-1 flex items-center gap-1 text-sm text-amber-600">
+                        <Clock className="h-3.5 w-3.5" />
+                        Member requested counter payment
+                      </p>
+                    )}
+                    {fine.pending_status === "otp_sent" && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Online {methodLabel(fine.pending_method)} payment in progress
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <p className="text-2xl font-bold text-destructive">৳{fine.amount_bdt.toFixed(2)}</p>
                       <Badge variant="destructive">Unpaid</Badge>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleWaive(fine.fine_id)}
-                      disabled={busyId === fine.fine_id}
-                    >
-                      {busyId === fine.fine_id ? "Waiving..." : "Waive Fine"}
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      {fine.pending_status === "awaiting_counter" && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirmCash(fine.fine_id)}
+                          disabled={busyId === fine.fine_id}
+                        >
+                          <Banknote className="h-4 w-4 mr-2" />
+                          {busyId === fine.fine_id ? "Confirming…" : "Confirm Cash"}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleWaive(fine.fine_id)}
+                        disabled={busyId === fine.fine_id}
+                      >
+                        {busyId === fine.fine_id ? "Working…" : "Waive Fine"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
