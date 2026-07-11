@@ -227,7 +227,7 @@ func (h *Handler) BorrowBook(w http.ResponseWriter, r *http.Request) {
 	var loanID, dueDate string
 	if err := tx.QueryRow(r.Context(),
 		`INSERT INTO loans (user_id, catalog_id, due_date)
-		 VALUES ($1, $2, now() + interval '14 days')
+		 VALUES ($1, $2, now() + interval '7 days')
 		 RETURNING loan_id, to_char(due_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
 		userID, req.CatalogID,
 	).Scan(&loanID, &dueDate); err != nil {
