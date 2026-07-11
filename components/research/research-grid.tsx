@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { FileText, Calendar, User } from "lucide-react";
 import { apiClient, ResearchPaper } from "@/lib/api";
+import { Pager } from "@/components/shared/pager";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -25,8 +26,12 @@ function ResearchGridInner() {
   const [total, setTotal] = useState(0);
 
   const query = searchParams.get("q") || "";
+  const rtype = searchParams.get("rtype") || "";
+  const year = searchParams.get("year") || "";
+  const topic = searchParams.get("topic") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const perPage = 12;
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     const fetchPapers = async () => {
@@ -34,10 +39,18 @@ function ResearchGridInner() {
       try {
         // The public research page only shows published papers; drafts and
         // papers under review live in My Uploads / the dashboard review queue.
-        const response = await apiClient.listResearch({ status: "published" });
+        const response = await apiClient.listResearch({
+          status: "published",
+          rtype: rtype || undefined,
+          year: year || undefined,
+          topic: topic || undefined,
+          page,
+          per_page: perPage,
+        });
         const data = response?.data || [];
         setPapers(Array.isArray(data) ? data : []);
         setTotal(response?.total || 0);
+        setTotalPages(response?.total_pages || 1);
       } catch (error) {
         console.error("Failed to fetch research papers:", error);
         setPapers([]);
@@ -47,7 +60,7 @@ function ResearchGridInner() {
       }
     };
     fetchPapers();
-  }, [query, page]);
+  }, [query, rtype, year, topic, page]);
 
   if (isLoading) {
     return (
@@ -131,6 +144,7 @@ function ResearchGridInner() {
           </Card>
         ))}
       </div>
+      <Pager page={page} totalPages={totalPages} basePath="/research" />
     </div>
   );
 }

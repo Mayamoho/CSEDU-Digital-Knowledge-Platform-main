@@ -344,15 +344,19 @@ export function ProjectUploadForm() {
             />
           </div>
 
-          {/* Keywords */}
+          {/* Technologies (stored as keywords; powers the Technology filter) */}
           <div className="space-y-2">
-            <Label>Keywords/Tags *</Label>
+            <Label>Technologies Used *</Label>
+            <p className="text-xs text-muted-foreground">
+              Add one technology per entry (e.g. React, Python, TensorFlow). These
+              power the Technology filter on the Projects page, so keep them consistent.
+            </p>
             {keywords.map((keyword, index) => (
               <div key={index} className="flex gap-2">
                 <Input
                   value={keyword}
                   onChange={(e) => updateKeyword(index, e.target.value)}
-                  placeholder="Keyword or technology used"
+                  placeholder="e.g. React, Python, Machine Learning"
                   disabled={isUploading}
                 />
                 {keywords.length > 1 && (

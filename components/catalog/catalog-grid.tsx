@@ -37,10 +37,11 @@ export function CatalogGrid() {
   const [sortBy, setSortBy]       = useState("title");
   const { checkPermission } = useRoleCheck();
 
-  const query   = searchParams.get("q")      || "";
-  const format  = searchParams.get("format") || "";
-  const status  = searchParams.get("status") || "";
-  const page    = parseInt(searchParams.get("page") || "1");
+  const query        = searchParams.get("q")            || "";
+  const availability = searchParams.get("availability") || searchParams.get("status") || "";
+  const format       = searchParams.get("format")       || "";
+  const year         = searchParams.get("year")         || "";
+  const page         = parseInt(searchParams.get("page") || "1");
   const perPage = 12;
 
   const fetchItems = useCallback(async () => {
@@ -48,9 +49,10 @@ export function CatalogGrid() {
     setError("");
     try {
       const res = await apiClient.getLibraryCatalog({
-        q:        query || undefined,
-        format:   format || undefined,
-        status:   status || undefined,
+        q:            query || undefined,
+        availability: availability || undefined,
+        format:       format || undefined,
+        year:         year || undefined,
         page,
         per_page: perPage,
       });
@@ -62,7 +64,7 @@ export function CatalogGrid() {
     } finally {
       setIsLoading(false);
     }
-  }, [query, format, status, page, perPage]);
+  }, [query, availability, format, year, page, perPage]);
 
   useEffect(() => {
     fetchItems();

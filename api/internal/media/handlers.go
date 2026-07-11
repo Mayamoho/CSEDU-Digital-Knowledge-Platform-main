@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -256,6 +257,10 @@ func (h *Handler) ListMedia(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query().Get("q")
 	itemType := r.URL.Query().Get("item_type")
+	// Hierarchy: format -> access tier -> year (year of upload_date).
+	format := r.URL.Query().Get("format")
+	access := r.URL.Query().Get("access")
+	year := r.URL.Query().Get("year")
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 	if page < 1 {
@@ -298,6 +303,33 @@ func (h *Handler) ListMedia(w http.ResponseWriter, r *http.Request) {
 		argIdx++
 	}
 
+	// Snapshot the base (RBAC + q + item_type) for facet counts, then layer the
+	// hierarchy filters on top for the actual result set.
+	baseWhere := strings.Join(where, " AND ")
+	baseArgs := make([]any, len(args))
+	copy(baseArgs, args)
+	facets := h.mediaFacets(r.Context(), baseWhere, baseArgs, format, access)
+
+	if format != "" {
+		where = append(where, `m.format = $`+strconv.Itoa(argIdx))
+		args = append(args, format)
+		argIdx++
+	}
+	if access != "" {
+		where = append(where, `m.access_tier = $`+strconv.Itoa(argIdx))
+		args = append(args, access)
+		argIdx++
+	}
+	if year != "" {
+		where = append(where, `EXTRACT(YEAR FROM m.upload_date)::int = $`+strconv.Itoa(argIdx))
+		if y, err := strconv.Atoi(year); err == nil {
+			args = append(args, y)
+			argIdx++
+		} else {
+			where = where[:len(where)-1]
+		}
+	}
+
 	whereClause := strings.Join(where, " AND ")
 
 	countArgs := make([]any, len(args))
@@ -338,7 +370,96 @@ func (h *Handler) ListMedia(w http.ResponseWriter, r *http.Request) {
 		"page":        page,
 		"per_page":    perPage,
 		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
+		"facets":      facets,
 	})
+}
+
+type facetBucket struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+var accessTierLabels = map[string]string{
+	"public": "Public", "student": "Students", "researcher": "Researchers",
+	"librarian": "Staff Only", "restricted": "Restricted",
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// mediaFacets builds the format -> access tier -> year facet tree for the
+// archive/media listing. baseWhere/baseArgs carry the RBAC + search + item_type
+// predicates; each level then layers the selections above it.
+func (h *Handler) mediaFacets(ctx context.Context, baseWhere string, baseArgs []any, format, access string) map[string][]facetBucket {
+	out := map[string][]facetBucket{"format": {}, "access": {}, "year": {}}
+
+	// Level 1: format (base only).
+	if rows, err := h.db.Query(ctx,
+		`SELECT m.format, COUNT(*) FROM media_items m WHERE `+baseWhere+`
+		 GROUP BY m.format ORDER BY COUNT(*) DESC, m.format`, baseArgs...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var b facetBucket
+			if rows.Scan(&b.Value, &b.Count) == nil {
+				b.Label = titleCase(b.Value)
+				out["format"] = append(out["format"], b)
+			}
+		}
+	}
+
+	// Level 2: access tier within selected format.
+	aWhere := baseWhere
+	aArgs := append([]any{}, baseArgs...)
+	if format != "" {
+		aArgs = append(aArgs, format)
+		aWhere += ` AND m.format = $` + strconv.Itoa(len(aArgs))
+	}
+	if rows, err := h.db.Query(ctx,
+		`SELECT m.access_tier, COUNT(*) FROM media_items m WHERE `+aWhere+`
+		 GROUP BY m.access_tier ORDER BY COUNT(*) DESC`, aArgs...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var b facetBucket
+			if rows.Scan(&b.Value, &b.Count) == nil {
+				if lbl, ok := accessTierLabels[b.Value]; ok {
+					b.Label = lbl
+				} else {
+					b.Label = titleCase(b.Value)
+				}
+				out["access"] = append(out["access"], b)
+			}
+		}
+	}
+
+	// Level 3: year within format + access (only once a format is chosen).
+	if format != "" {
+		yWhere := aWhere
+		yArgs := append([]any{}, aArgs...)
+		if access != "" {
+			yArgs = append(yArgs, access)
+			yWhere += ` AND m.access_tier = $` + strconv.Itoa(len(yArgs))
+		}
+		if rows, err := h.db.Query(ctx,
+			`SELECT EXTRACT(YEAR FROM m.upload_date)::int AS y, COUNT(*)
+			 FROM media_items m WHERE `+yWhere+`
+			 GROUP BY y ORDER BY y DESC`, yArgs...); err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var y, c int
+				if rows.Scan(&y, &c) == nil {
+					ys := strconv.Itoa(y)
+					out["year"] = append(out["year"], facetBucket{ys, ys, c})
+				}
+			}
+		}
+	}
+
+	return out
 }
 
 // GET /api/v1/media/{itemId}

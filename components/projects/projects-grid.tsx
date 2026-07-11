@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BookOpen, Calendar, User, Users, Star, ExternalLink, Github, Globe, Smartphone } from "lucide-react";
+import { Pager } from "@/components/shared/pager";
 
 const statusConfig = {
   draft: { label: "Draft", variant: "secondary" as const },
@@ -32,18 +33,27 @@ function ProjectsGridInner() {
   const [total, setTotal] = useState(0);
 
   const query = searchParams.get("q") || "";
+  const year = searchParams.get("year") || "";
+  const tech = searchParams.get("tech") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const perPage = 12;
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     const fetchProjects = async () => {
       setIsLoading(true);
       try {
-        const response = await apiClient.listProjects();
+        const response = await apiClient.listProjects({
+          year: year || undefined,
+          tech: tech || undefined,
+          page,
+          per_page: perPage,
+        });
         // Ensure we always have an array, even if response is malformed
         const projectsData = response?.data || [];
         setProjects(Array.isArray(projectsData) ? projectsData : []);
         setTotal(response?.total || 0);
+        setTotalPages(response?.total_pages || 1);
       } catch (error) {
         console.error('Failed to fetch projects:', error);
         setProjects([]);
@@ -54,7 +64,7 @@ function ProjectsGridInner() {
     };
 
     fetchProjects();
-  }, [query, page]);
+  }, [query, year, tech, page]);
 
   if (isLoading) {
     return (
@@ -200,13 +210,7 @@ function ProjectsGridInner() {
         ))}
       </div>
 
-      {Math.ceil(total / perPage) > 1 && (
-        <div className="flex justify-center mt-6">
-          <div className="text-sm text-muted-foreground">
-            Page {page} of {Math.ceil(total / perPage)}
-          </div>
-        </div>
-      )}
+      <Pager page={page} totalPages={totalPages} basePath="/projects" />
     </div>
   );
 }

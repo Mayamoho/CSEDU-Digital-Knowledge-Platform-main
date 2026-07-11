@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -54,7 +55,13 @@ type paginatedCatalog struct {
 func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	format := r.URL.Query().Get("format")
-	status := r.URL.Query().Get("status")
+	// Hierarchy: availability -> format -> year. "status" kept as an alias for
+	// availability for backward compatibility.
+	availability := r.URL.Query().Get("availability")
+	if availability == "" {
+		availability = r.URL.Query().Get("status")
+	}
+	year := r.URL.Query().Get("year")
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 	if page < 1 {
@@ -79,21 +86,28 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 		args = append(args, q)
 		argIdx++
 	}
-	if format != "" {
-		where = append(where, `format = $`+strconv.Itoa(argIdx))
-		args = append(args, format)
-		argIdx++
-	}
-
-	// status is derived from available_copies
-	switch status {
+	// availability is derived from available_copies
+	switch availability {
 	case "available":
 		where = append(where, `available_copies > 0`)
 	case "borrowed":
 		where = append(where, `available_copies = 0`)
 	}
+	if format != "" {
+		where = append(where, `format = $`+strconv.Itoa(argIdx))
+		args = append(args, format)
+		argIdx++
+	}
+	if year != "" {
+		where = append(where, `year = $`+strconv.Itoa(argIdx))
+		args = append(args, year)
+		argIdx++
+	}
 
 	whereClause := strings.Join(where, " AND ")
+
+	// Dependent facet counts for the availability -> format -> year hierarchy.
+	facets := h.catalogFacets(r.Context(), q, availability, format)
 
 	// Count
 	countArgs := make([]any, len(args))
@@ -145,13 +159,113 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 		items = append(items, it)
 	}
 
-	writeJSON(w, http.StatusOK, paginatedCatalog{
-		Data:       items,
-		Total:      total,
-		Page:       page,
-		PerPage:    perPage,
-		TotalPages: int(math.Ceil(float64(total) / float64(perPage))),
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":        items,
+		"total":       total,
+		"page":        page,
+		"per_page":    perPage,
+		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
+		"facets":      facets,
 	})
+}
+
+// facetBucket is one selectable option in a hierarchical filter, with the
+// number of matching resources given the selections above it.
+type facetBucket struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+// catalogFacets builds the availability -> format -> year facet tree. Each
+// level's counts respect the selections at the levels above it (and the search
+// query), so the UI can show live counts as the user drills down.
+func (h *Handler) catalogFacets(ctx context.Context, q, availability, format string) map[string][]facetBucket {
+	out := map[string][]facetBucket{
+		"availability": {},
+		"format":       {},
+		"year":         {},
+	}
+
+	// Shared search predicate + args, reused by every facet query.
+	base := "1=1"
+	baseArgs := []any{}
+	if q != "" {
+		base = `(to_tsvector('english', title) @@ plainto_tsquery('english', $1)
+			OR to_tsvector('english', author) @@ plainto_tsquery('english', $1)
+			OR isbn ILIKE '%' || $1 || '%')`
+		baseArgs = append(baseArgs, q)
+	}
+
+	availCond := func() string {
+		switch availability {
+		case "available":
+			return " AND available_copies > 0"
+		case "borrowed":
+			return " AND available_copies = 0"
+		}
+		return ""
+	}()
+
+	// Level 1: availability (counts ignore availability selection itself).
+	var avail, borrowed int
+	_ = h.db.QueryRow(ctx,
+		`SELECT COUNT(*) FILTER (WHERE available_copies > 0),
+		        COUNT(*) FILTER (WHERE available_copies = 0)
+		 FROM library_catalog WHERE `+base, baseArgs...).Scan(&avail, &borrowed)
+	if avail > 0 {
+		out["availability"] = append(out["availability"], facetBucket{"available", "Available", avail})
+	}
+	if borrowed > 0 {
+		out["availability"] = append(out["availability"], facetBucket{"borrowed", "Currently Borrowed", borrowed})
+	}
+
+	// Level 2: format within selected availability.
+	fRows, err := h.db.Query(ctx,
+		`SELECT format, COUNT(*) FROM library_catalog
+		 WHERE `+base+availCond+`
+		 GROUP BY format ORDER BY COUNT(*) DESC, format`, baseArgs...)
+	if err == nil {
+		defer fRows.Close()
+		for fRows.Next() {
+			var b facetBucket
+			if fRows.Scan(&b.Value, &b.Count) == nil {
+				b.Label = titleCase(b.Value)
+				out["format"] = append(out["format"], b)
+			}
+		}
+	}
+
+	// Level 3: year within availability + format (only once a format is chosen).
+	if format != "" {
+		yArgs := append(append([]any{}, baseArgs...), format)
+		yRows, err := h.db.Query(ctx,
+			`SELECT year, COUNT(*) FROM library_catalog
+			 WHERE `+base+availCond+` AND format = $`+strconv.Itoa(len(baseArgs)+1)+` AND year IS NOT NULL
+			 GROUP BY year ORDER BY year DESC`, yArgs...)
+		if err == nil {
+			defer yRows.Close()
+			for yRows.Next() {
+				var y int
+				var c int
+				if yRows.Scan(&y, &c) == nil {
+					ys := strconv.Itoa(y)
+					out["year"] = append(out["year"], facetBucket{ys, ys, c})
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+// titleCase upper-cases the first rune — enough to prettify short enum values
+// like "book" -> "Book" without pulling in golang.org/x/text.
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // GET /api/v1/library/catalog/{itemId}

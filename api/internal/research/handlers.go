@@ -1,9 +1,13 @@
 package research
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -184,90 +188,114 @@ func (h *Handler) SubmitResearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type facetBucket struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+const researchCols = `rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors,
+	                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal,
+	                rp.conference, m.status, m.access_tier, m.file_path, m.created_by,
+	                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`
+
+const researchFromJoin = ` FROM research_papers rp
+	         JOIN media_items m ON rp.item_id = m.item_id
+	         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id`
+
+// researchTypeCond maps a derived research type to a WHERE predicate. Type is
+// inferred from which venue field is populated (there is no explicit column).
+func researchTypeCond(rtype string) string {
+	switch rtype {
+	case "journal":
+		return "rp.journal IS NOT NULL AND rp.journal <> ''"
+	case "conference":
+		return "rp.conference IS NOT NULL AND rp.conference <> ''"
+	case "thesis":
+		return "COALESCE(rp.journal,'') = '' AND COALESCE(rp.conference,'') = ''"
+	}
+	return ""
+}
+
 // GET /api/v1/research
 func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	userID, _ := authpkg.GetUserID(r) // optional auth
 	roleTier, _ := authpkg.GetRoleTier(r)
 	status := r.URL.Query().Get("status")
 	forReview := r.URL.Query().Get("for_review") == "true"
+	// Hierarchy: type (journal|conference|thesis) -> year -> topic (keyword).
+	rtype := r.URL.Query().Get("rtype")
+	year := r.URL.Query().Get("year")
+	topic := r.URL.Query().Get("topic")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 12
+	}
+	offset := (page - 1) * perPage
 
-	var query string
-	var args []interface{}
+	// Visibility predicates (role-based), shared by facets + results.
+	var baseConds []string
+	var baseArgs []interface{}
+	orderBy := " ORDER BY rp.submitted_at DESC"
 
-	// Special case: researchers can see papers pending review (excluding their own)
-	if forReview && roleTier == "researcher" {
-		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-		                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-		         FROM research_papers rp
-		         JOIN media_items m ON rp.item_id = m.item_id
-		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-		         WHERE m.status = 'review' AND m.created_by != $1 AND rp.reviewer_id IS NULL
-		         ORDER BY rp.submitted_at ASC`
-		args = append(args, userID)
-	} else if roleTier == "administrator" || roleTier == "librarian" || roleTier == "researcher" {
-		// Can see all papers
+	switch {
+	case forReview && roleTier == "researcher":
+		baseArgs = append(baseArgs, userID)
+		baseConds = append(baseConds, "m.status = 'review'", "m.created_by != $1", "rp.reviewer_id IS NULL")
+		orderBy = " ORDER BY rp.submitted_at ASC"
+	case roleTier == "administrator" || roleTier == "librarian" || roleTier == "researcher":
 		if status != "" {
-			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-			         FROM research_papers rp
-			         JOIN media_items m ON rp.item_id = m.item_id
-			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-			         WHERE m.status = $1
-			         ORDER BY rp.submitted_at DESC`
-			args = append(args, status)
-		} else {
-			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-			         FROM research_papers rp
-			         JOIN media_items m ON rp.item_id = m.item_id
-			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-			         ORDER BY rp.submitted_at DESC`
+			baseArgs = append(baseArgs, status)
+			baseConds = append(baseConds, "m.status = $"+strconv.Itoa(len(baseArgs)))
 		}
-	} else if userID != "" {
-		// Authenticated non-researcher: see published + own papers
+	case userID != "":
+		baseArgs = append(baseArgs, userID)
+		baseConds = append(baseConds, "(m.status = 'published' OR m.created_by = $"+strconv.Itoa(len(baseArgs))+")")
 		if status != "" {
-			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-			         FROM research_papers rp
-			         JOIN media_items m ON rp.item_id = m.item_id
-			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-			         WHERE (m.status = 'published' OR m.created_by = $1) AND m.status = $2
-			         ORDER BY rp.submitted_at DESC`
-			args = append(args, userID, status)
-		} else {
-			query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-			                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-			                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-			                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-			         FROM research_papers rp
-			         JOIN media_items m ON rp.item_id = m.item_id
-			         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-			         WHERE m.status = 'published' OR m.created_by = $1
-			         ORDER BY rp.submitted_at DESC`
-			args = append(args, userID)
+			baseArgs = append(baseArgs, status)
+			baseConds = append(baseConds, "m.status = $"+strconv.Itoa(len(baseArgs)))
 		}
-	} else {
-		// Unauthenticated: only published papers
-		query = `SELECT rp.paper_id, rp.item_id, m.title, rp.authors, rp.co_authors, 
-		                COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'), to_char(rp.publication_date, 'YYYY-MM-DD'), rp.doi, rp.journal, 
-		                rp.conference, m.status, m.access_tier, m.file_path, m.created_by, 
-		                rp.submitted_at, rp.reviewer_id, rp.review_notes, to_char(rp.reviewed_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-		         FROM research_papers rp
-		         JOIN media_items m ON rp.item_id = m.item_id
-		         LEFT JOIN media_metadata mm ON m.item_id = mm.item_id
-		         WHERE m.status = 'published'
-		         ORDER BY rp.submitted_at DESC`
+	default:
+		baseConds = append(baseConds, "m.status = 'published'")
+	}
+	baseWhere := "1=1"
+	if len(baseConds) > 0 {
+		baseWhere = strings.Join(baseConds, " AND ")
 	}
 
-	rows, err := h.db.Query(r.Context(), query, args...)
+	facets := h.researchFacets(r.Context(), baseWhere, baseArgs, rtype, year)
+
+	// Hierarchy filters on top for the actual page of results.
+	conds := append([]string{}, baseConds...)
+	args := append([]interface{}{}, baseArgs...)
+	if c := researchTypeCond(rtype); c != "" {
+		conds = append(conds, c)
+	}
+	if year != "" {
+		args = append(args, year)
+		conds = append(conds, "EXTRACT(YEAR FROM rp.publication_date)::int = $"+strconv.Itoa(len(args)))
+	}
+	if topic != "" {
+		args = append(args, topic)
+		conds = append(conds, "mm.keywords @> ARRAY[$"+strconv.Itoa(len(args))+"]::text[]")
+	}
+	whereClause := "1=1"
+	if len(conds) > 0 {
+		whereClause = strings.Join(conds, " AND ")
+	}
+
+	var total int
+	_ = h.db.QueryRow(r.Context(), `SELECT COUNT(*)`+researchFromJoin+` WHERE `+whereClause, args...).Scan(&total)
+
+	dataArgs := append(append([]interface{}{}, args...), perPage, offset)
+	query := `SELECT ` + researchCols + researchFromJoin + ` WHERE ` + whereClause + orderBy +
+		` LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
+
+	rows, err := h.db.Query(r.Context(), query, dataArgs...)
 	if err != nil {
 		log.Printf("Failed to query research papers: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to retrieve research papers")
@@ -292,9 +320,79 @@ func (h *Handler) ListResearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"data":  papers,
-		"total": len(papers),
+		"data":        papers,
+		"total":       total,
+		"page":        page,
+		"per_page":    perPage,
+		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
+		"facets":      facets,
 	})
+}
+
+// researchFacets builds the type -> year -> topic facet tree.
+func (h *Handler) researchFacets(ctx context.Context, baseWhere string, baseArgs []interface{}, rtype, year string) map[string][]facetBucket {
+	out := map[string][]facetBucket{"rtype": {}, "year": {}, "topic": {}}
+
+	// Level 1: type counts (derived from venue fields).
+	var j, c, t int
+	_ = h.db.QueryRow(ctx,
+		`SELECT COUNT(*) FILTER (WHERE rp.journal IS NOT NULL AND rp.journal <> ''),
+		        COUNT(*) FILTER (WHERE rp.conference IS NOT NULL AND rp.conference <> ''),
+		        COUNT(*) FILTER (WHERE COALESCE(rp.journal,'') = '' AND COALESCE(rp.conference,'') = '')`+
+			researchFromJoin+` WHERE `+baseWhere, baseArgs...).Scan(&j, &c, &t)
+	if j > 0 {
+		out["rtype"] = append(out["rtype"], facetBucket{"journal", "Journal Articles", j})
+	}
+	if c > 0 {
+		out["rtype"] = append(out["rtype"], facetBucket{"conference", "Conference Papers", c})
+	}
+	if t > 0 {
+		out["rtype"] = append(out["rtype"], facetBucket{"thesis", "Theses / Other", t})
+	}
+
+	// Level 2: year within selected type.
+	yWhere := baseWhere
+	if cond := researchTypeCond(rtype); cond != "" {
+		yWhere += " AND " + cond
+	}
+	if rows, err := h.db.Query(ctx,
+		`SELECT EXTRACT(YEAR FROM rp.publication_date)::int AS y, COUNT(*)`+researchFromJoin+`
+		 WHERE `+yWhere+` AND rp.publication_date IS NOT NULL
+		 GROUP BY y ORDER BY y DESC`, baseArgs...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var y, n int
+			if rows.Scan(&y, &n) == nil {
+				ys := strconv.Itoa(y)
+				out["year"] = append(out["year"], facetBucket{ys, ys, n})
+			}
+		}
+	}
+
+	// Level 3: topic within type + year (only once a type is chosen).
+	if rtype != "" {
+		tWhere := yWhere
+		tArgs := append([]interface{}{}, baseArgs...)
+		if year != "" {
+			tArgs = append(tArgs, year)
+			tWhere += " AND EXTRACT(YEAR FROM rp.publication_date)::int = $" + strconv.Itoa(len(tArgs))
+		}
+		if rows, err := h.db.Query(ctx,
+			`SELECT kw, COUNT(*) FROM (
+			   SELECT unnest(mm.keywords) AS kw`+researchFromJoin+` WHERE `+tWhere+`
+			 ) s WHERE kw <> '' GROUP BY kw ORDER BY COUNT(*) DESC, kw`, tArgs...); err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var b facetBucket
+				if rows.Scan(&b.Value, &b.Count) == nil {
+					b.Label = b.Value
+					out["topic"] = append(out["topic"], b)
+				}
+			}
+		}
+	}
+
+	return out
 }
 
 // GET /api/v1/research/{paperId}

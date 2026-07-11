@@ -34,6 +34,9 @@ function ArchiveGridInner() {
   const [total, setTotal] = useState(0);
 
   const query = searchParams.get("q") || "";
+  const format = searchParams.get("format") || "";
+  const access = searchParams.get("access") || "";
+  const year = searchParams.get("year") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const perPage = 12;
 
@@ -43,11 +46,14 @@ function ArchiveGridInner() {
       try {
         const response = await apiClient.getMediaItems({
           q: query || undefined,
+          format: format || undefined,
+          access: access || undefined,
+          year: year || undefined,
           page,
           per_page: perPage,
           item_type: 'archive',
         });
-        
+
         setItems(response.data);
         setTotal(response.total);
       } catch (error) {
@@ -60,7 +66,7 @@ function ArchiveGridInner() {
     };
 
     fetchItems();
-  }, [query, page]);
+  }, [query, format, access, year, page]);
 
   const totalPages = Math.ceil(total / perPage);
 

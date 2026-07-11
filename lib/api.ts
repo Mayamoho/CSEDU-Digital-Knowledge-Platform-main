@@ -237,12 +237,23 @@ export interface ChatHistoryResponse {
   }>;
 }
 
+// One selectable option in a hierarchical filter, with its live match count.
+export interface FacetBucket {
+  value: string;
+  label: string;
+  count: number;
+}
+
+// Facet buckets keyed by hierarchy level name (e.g. "format", "year", "tech").
+export type Facets = Record<string, FacetBucket[]>;
+
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
   page: number;
   per_page: number;
   total_pages: number;
+  facets?: Facets;
 }
 
 export interface SearchParams {
@@ -253,6 +264,13 @@ export interface SearchParams {
   status?: string;
   access_tier?: string;
   item_type?: string;
+  // Hierarchical filter params (catalog/archive/research/projects).
+  availability?: string;
+  access?: string;
+  year?: string;
+  tech?: string;
+  rtype?: string;
+  topic?: string;
 }
 
 class APIClient {
@@ -656,10 +674,23 @@ class APIClient {
     });
   }
 
-  async listResearch(params?: { status?: string; for_review?: boolean }): Promise<{ data: ResearchPaper[]; total: number }> {
+  async listResearch(params?: {
+    status?: string;
+    for_review?: boolean;
+    rtype?: string;
+    year?: string;
+    topic?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<{ data: ResearchPaper[]; total: number; page?: number; per_page?: number; total_pages?: number; facets?: Facets }> {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.append('status', params.status);
     if (params?.for_review) searchParams.append('for_review', 'true');
+    if (params?.rtype) searchParams.append('rtype', params.rtype);
+    if (params?.year) searchParams.append('year', params.year);
+    if (params?.topic) searchParams.append('topic', params.topic);
+    if (params?.page) searchParams.append('page', String(params.page));
+    if (params?.per_page) searchParams.append('per_page', String(params.per_page));
     return this.request(`/research?${searchParams.toString()}`);
   }
 
@@ -724,10 +755,19 @@ class APIClient {
     });
   }
 
-  async listProjects(params?: { status?: string; year?: string }): Promise<{ data: StudentProject[]; total: number }> {
+  async listProjects(params?: {
+    status?: string;
+    year?: string;
+    tech?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<{ data: StudentProject[]; total: number; page?: number; per_page?: number; total_pages?: number; facets?: Facets }> {
     const sp = new URLSearchParams();
     if (params?.status) sp.append('status', params.status);
     if (params?.year) sp.append('year', params.year);
+    if (params?.tech) sp.append('tech', params.tech);
+    if (params?.page) sp.append('page', String(params.page));
+    if (params?.per_page) sp.append('per_page', String(params.per_page));
     return this.request(`/projects?${sp.toString()}`);
   }
 

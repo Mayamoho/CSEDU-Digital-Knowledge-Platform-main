@@ -1,8 +1,10 @@
 package projects
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -219,51 +221,69 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	userID, _ := authpkg.GetUserID(r) // Optional auth - userID might be empty
 	roleTier, _ := authpkg.GetRoleTier(r)
 	status := r.URL.Query().Get("status")
+	// Hierarchy: year -> technology (technology stored in media_metadata.keywords).
 	year := r.URL.Query().Get("year")
+	tech := r.URL.Query().Get("tech")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 12
+	}
+	offset := (page - 1) * perPage
 
-	var query string
-	var args []interface{}
-	argCount := 0
-
-	// Build query based on role
-	baseQuery := `SELECT sp.project_id, sp.item_id, m.title, sp.team_members, sp.supervisor_id, 
-	                     sp.academic_year, sp.course_code, mm.abstract, mm.keywords, 
-	                     m.status, m.access_tier, m.file_path, m.created_by, 
-	                     sp.submitted_at, sp.approved_by, sp.approved_at,
-	                     sp.web_url, sp.github_repo, sp.app_download
-	              FROM student_projects sp
+	const fromJoin = ` FROM student_projects sp
 	              JOIN media_items m ON sp.item_id = m.item_id
 	              JOIN media_metadata mm ON m.item_id = mm.item_id`
 
-	var conditions []string
-
-	// If not authenticated or not admin/librarian, only show published projects
+	// Base predicates (RBAC + status) shared by facets and the result set.
+	var baseConds []string
+	var baseArgs []interface{}
 	if userID == "" || (roleTier != "administrator" && roleTier != "librarian") {
-		conditions = append(conditions, "m.status = 'published'")
+		baseConds = append(baseConds, "m.status = 'published'")
 	} else if status != "" {
-		argCount++
-		conditions = append(conditions, "m.status = $"+strconv.Itoa(argCount))
-		args = append(args, status)
+		baseArgs = append(baseArgs, status)
+		baseConds = append(baseConds, "m.status = $"+strconv.Itoa(len(baseArgs)))
+	}
+	baseWhere := "1=1"
+	if len(baseConds) > 0 {
+		baseWhere = strings.Join(baseConds, " AND ")
 	}
 
+	facets := h.projectsFacets(r.Context(), fromJoin, baseWhere, baseArgs, year)
+
+	// Layer the hierarchy filters on top for the actual page of results.
+	conds := append([]string{}, baseConds...)
+	args := append([]interface{}{}, baseArgs...)
 	if year != "" {
-		argCount++
-		conditions = append(conditions, "sp.academic_year = $"+strconv.Itoa(argCount))
 		args = append(args, year)
+		conds = append(conds, "sp.academic_year = $"+strconv.Itoa(len(args)))
+	}
+	if tech != "" {
+		args = append(args, tech)
+		conds = append(conds, "mm.keywords @> ARRAY[$"+strconv.Itoa(len(args))+"]::text[]")
+	}
+	whereClause := "1=1"
+	if len(conds) > 0 {
+		whereClause = strings.Join(conds, " AND ")
 	}
 
-	if len(conditions) > 0 {
-		query = baseQuery + " WHERE " + conditions[0]
-		for i := 1; i < len(conditions); i++ {
-			query += " AND " + conditions[i]
-		}
-	} else {
-		query = baseQuery
-	}
+	var total int
+	_ = h.db.QueryRow(r.Context(), `SELECT COUNT(*)`+fromJoin+` WHERE `+whereClause, args...).Scan(&total)
 
-	query += " ORDER BY sp.academic_year DESC, sp.submitted_at DESC"
+	dataArgs := append(append([]interface{}{}, args...), perPage, offset)
+	query := `SELECT sp.project_id, sp.item_id, m.title, sp.team_members, sp.supervisor_id,
+	                 sp.academic_year, sp.course_code, mm.abstract, mm.keywords,
+	                 m.status, m.access_tier, m.file_path, m.created_by,
+	                 sp.submitted_at, sp.approved_by, sp.approved_at,
+	                 sp.web_url, sp.github_repo, sp.app_download` + fromJoin +
+		` WHERE ` + whereClause +
+		` ORDER BY sp.academic_year DESC, sp.submitted_at DESC` +
+		` LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
 
-	rows, err := h.db.Query(r.Context(), query, args...)
+	rows, err := h.db.Query(r.Context(), query, dataArgs...)
 	if err != nil {
 		log.Printf("Failed to query projects: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to retrieve projects")
@@ -289,9 +309,58 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"data":  projects,
-		"total": len(projects),
+		"data":        projects,
+		"total":       total,
+		"page":        page,
+		"per_page":    perPage,
+		"total_pages": int(math.Ceil(float64(total) / float64(perPage))),
+		"facets":      facets,
 	})
+}
+
+type facetBucket struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+// projectsFacets builds the year -> technology facet tree. Technologies live in
+// media_metadata.keywords; the tech level only populates once a year is chosen.
+func (h *Handler) projectsFacets(ctx context.Context, fromJoin, baseWhere string, baseArgs []interface{}, year string) map[string][]facetBucket {
+	out := map[string][]facetBucket{"year": {}, "tech": {}}
+
+	if rows, err := h.db.Query(ctx,
+		`SELECT sp.academic_year, COUNT(*)`+fromJoin+` WHERE `+baseWhere+`
+		 GROUP BY sp.academic_year ORDER BY sp.academic_year DESC`, baseArgs...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var y, c int
+			if rows.Scan(&y, &c) == nil {
+				ys := strconv.Itoa(y)
+				out["year"] = append(out["year"], facetBucket{ys, ys, c})
+			}
+		}
+	}
+
+	if year != "" {
+		tArgs := append(append([]interface{}{}, baseArgs...), year)
+		if rows, err := h.db.Query(ctx,
+			`SELECT kw, COUNT(*) FROM (
+			   SELECT unnest(mm.keywords) AS kw`+fromJoin+`
+			   WHERE `+baseWhere+` AND sp.academic_year = $`+strconv.Itoa(len(tArgs))+`
+			 ) t WHERE kw <> '' GROUP BY kw ORDER BY COUNT(*) DESC, kw`, tArgs...); err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var b facetBucket
+				if rows.Scan(&b.Value, &b.Count) == nil {
+					b.Label = b.Value
+					out["tech"] = append(out["tech"], b)
+				}
+			}
+		}
+	}
+
+	return out
 }
 
 // GET /api/v1/projects/{projectId}
