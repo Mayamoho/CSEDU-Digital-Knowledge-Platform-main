@@ -338,6 +338,23 @@ func (h *Handler) ReturnBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Assess a late fine when the book is returned after its due date. Without
+	// this, late returns escaped fining entirely: the fine-worker only scans
+	// loans that are still active (return_date IS NULL), so a returned loan was
+	// never fined. Formula mirrors the fine-worker defaults
+	// (FINE_RATE_BDT_PER_DAY=50, MAX_FINE_PER_LOAN_BDT=500). The 1-day floor
+	// keeps amount > 0 (chk_fine_positive); ON CONFLICT makes it idempotent
+	// against any fine the worker may have already created.
+	_, _ = tx.Exec(r.Context(), `
+		INSERT INTO fines (loan_id, user_id, amount, status, calculated_at)
+		SELECT loan_id, user_id,
+		       LEAST(FLOOR(EXTRACT(EPOCH FROM (return_date - due_date)) / 86400) * 50, 500),
+		       'pending', now()
+		FROM loans
+		WHERE loan_id = $1
+		  AND return_date >= due_date + interval '1 day'
+		ON CONFLICT (loan_id) DO NOTHING`, loanID)
+
 	_, _ = tx.Exec(r.Context(),
 		`UPDATE library_catalog SET available_copies = available_copies + 1 WHERE catalog_id = $1`, catalogID)
 
@@ -426,7 +443,8 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT f.fine_id, f.loan_id, f.amount, f.status, f.calculated_at, c.title
+		`SELECT f.fine_id, f.loan_id, f.amount::float8, f.status,
+		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), c.title
 		 FROM fines f
 		 JOIN loans l ON l.loan_id = f.loan_id
 		 JOIN library_catalog c ON c.catalog_id = l.catalog_id
@@ -475,7 +493,7 @@ func (h *Handler) ListFines(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAllFines(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT f.fine_id, f.loan_id, f.user_id, u.name, u.email,
-		        f.amount, f.status,
+		        f.amount::float8, f.status,
 		        to_char(f.calculated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		        c.title
 		 FROM fines f
