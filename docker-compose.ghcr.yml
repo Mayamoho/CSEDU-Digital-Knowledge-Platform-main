@@ -1,0 +1,24 @@
+# Override that makes the VM PULL prebuilt images instead of building them.
+# GitHub Actions builds + pushes these tags on every push to main; the VM runs:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.prod.yml -f docker-compose.ghcr.yml up -d
+#
+# IMAGE_TAG defaults to `latest`; CI pins it to the commit SHA so a rollback is
+# just re-running with an older tag.
+
+services:
+  frontend:
+    image: ghcr.io/mayamoho/csedu-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  api:
+    image: ghcr.io/mayamoho/csedu-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  rag:
+    image: ghcr.io/mayamoho/csedu-rag:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  fine-worker:
+    image: ghcr.io/mayamoho/csedu-fine-worker:${IMAGE_TAG:-latest}
+    pull_policy: always

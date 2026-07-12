@@ -205,6 +205,53 @@ async def embed_batch(texts: List[str]):
         raise HTTPException(status_code=500, detail=f"Batch embedding failed: {str(e)}")
 
 
+@app.post("/ingest/{item_id}")
+async def ingest_item(item_id: str):
+    """Force-(re)index a single media item now, instead of waiting for the sweep."""
+    import psycopg
+    from index_all import CONN_STR, get_minio_client
+    from ingest_worker import index_by_ids
+
+    try:
+        conn = psycopg.connect(CONN_STR)
+        try:
+            indexed = index_by_ids(conn, get_minio_client(), [item_id])
+        finally:
+            conn.close()
+        if not indexed:
+            raise HTTPException(status_code=404, detail="item not found or produced no text")
+        return {"item_id": item_id, "indexed": indexed}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ingest error for {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Ingest failed: {str(e)}")
+
+
+@app.get("/index-status")
+async def index_status():
+    """How much of the published corpus the assistant can actually see."""
+    from database import db
+
+    try:
+        row = db.execute_one(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM media_items WHERE status = 'published')  AS published_items,
+              (SELECT COUNT(DISTINCT ve.item_id)
+                 FROM vector_embeddings ve
+                 JOIN media_items mi ON mi.item_id = ve.item_id
+                WHERE mi.status = 'published')                               AS indexed_published_items,
+              (SELECT COUNT(*) FROM vector_embeddings)                       AS total_chunks,
+              (SELECT MAX(indexed_at) FROM rag_index_state)                  AS last_indexed_at
+            """
+        )
+        return {k: (str(v) if k == "last_indexed_at" and v else v) for k, v in row.items()}
+    except Exception as e:
+        logger.error(f"Index status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -248,6 +295,17 @@ async def startup_event():
     logger.info(f"Embedding dimension: {settings.embedding_dimension}")
     logger.info(f"Groq API configured: {bool(settings.groq_api_key)}")
     logger.info(f"Gemini API configured: {bool(settings.gemini_api_key)}")
+
+    # Ingestion runs in-process because it needs the embedder that is already
+    # loaded here. It drains the Redis upload queue and reconciles the index on a
+    # timer, so newly uploaded resources become answerable without a manual reindex.
+    try:
+        from ingest_worker import start_background_worker
+
+        start_background_worker()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Could not start ingest worker: {e}")
+
     logger.info("RAG Service ready!")
 
 

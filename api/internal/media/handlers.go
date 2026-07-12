@@ -219,11 +219,18 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Queue ingestion job for text extraction and embedding (only when a file was stored)
-	if hasFile && storedKey != nil && h.redis != nil {
+	// Queue ingestion so the RAG assistant can answer about this item right away.
+	// Link-only and image items are queued too: the indexer cannot read their
+	// contents, but it embeds their title/abstract/keywords/URL so the assistant
+	// can still say what they are.
+	if h.redis != nil {
+		storedPath := ""
+		if storedKey != nil {
+			storedPath = *storedKey
+		}
 		jobData := map[string]any{
 			"item_id":   itemID,
-			"file_path": *storedKey,
+			"file_path": storedPath,
 			"format":    ext,
 			"user_id":   userID,
 			"timestamp": time.Now().Format(time.RFC3339),

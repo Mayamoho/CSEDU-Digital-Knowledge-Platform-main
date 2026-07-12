@@ -22,6 +22,7 @@ Usage (inside the csedu_rag container):
     python index_all.py --skip-catalog
 """
 
+import hashlib
 import os
 import sys
 import logging
@@ -109,11 +110,38 @@ def _join(values) -> str:
     return ", ".join(str(v) for v in values if v)
 
 
+IMAGE_FORMATS = {"jpg", "jpeg", "png", "gif"}
+
+
+def format_note(item: dict) -> str:
+    """One line telling the LLM what kind of resource this is and whether its
+    contents could actually be read. Images and external links carry no
+    machine-readable text, so the assistant must describe them from metadata
+    rather than pretend to have read them."""
+    fmt = (item.get("format") or "").lower()
+    if fmt in IMAGE_FORMATS:
+        return (
+            f"Resource kind: {fmt.upper()} image file. The image carries no machine-readable text, so "
+            "only the description below is known. Say what the item is and point the user to the archive "
+            "page to view it; do not invent details about the picture."
+        )
+    if fmt == "url" or (not item.get("file_path") and item.get("external_url")):
+        return (
+            "Resource kind: external link. The linked page is not stored on the platform, so only the "
+            "description below is known. Summarise what the link is about and share the URL; do not "
+            "invent its contents."
+        )
+    if fmt == "pdf":
+        return "Resource kind: PDF document (full text indexed below)."
+    return f"Resource kind: {fmt.upper() if fmt else 'file'} attachment (no text extracted; description only)."
+
+
 def build_metadata_header(item: dict) -> str:
     """Build a structured, human-readable header from all metadata tables."""
     lines = [
         f"Title: {item['title']}",
         f"Type: {item['item_type'].capitalize()}",
+        format_note(item),
     ]
     if item.get("abstract"):
         lines.append(f"Abstract: {item['abstract']}")
@@ -168,12 +196,23 @@ def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP):
     return chunks
 
 
-def fetch_items(conn, index_all: bool):
-    where = "mi.status = 'published'"
-    if not index_all:
-        where += " AND mi.item_id NOT IN (SELECT DISTINCT item_id FROM vector_embeddings)"
+def fetch_items(conn, index_all: bool, item_ids: list | None = None):
+    """Published items, joined with every metadata table that feeds the document.
+
+    item_ids bypasses the status filter: an explicit ingestion job may arrive
+    while the item is still 'draft' (published later by a reviewer), and the
+    retriever filters on status at query time anyway."""
+    params: list = []
+    if item_ids:
+        where = "mi.item_id = ANY(%s::uuid[])"
+        params.append([str(i) for i in item_ids])
+    else:
+        where = "mi.status = 'published'"
+        if not index_all:
+            where += " AND mi.item_id NOT IN (SELECT DISTINCT item_id FROM vector_embeddings)"
     q = f"""
-        SELECT mi.item_id, mi.title, mi.item_type, mi.format, mi.file_path, mi.external_url,
+        SELECT mi.item_id, mi.title, mi.item_type, mi.format, mi.status,
+               mi.file_path, mi.external_url,
                mm.abstract, mm.tags, mm.keywords,
                rp.authors AS rp_authors, rp.co_authors, rp.journal, rp.conference,
                rp.doi, rp.publication_date,
@@ -187,8 +226,23 @@ def fetch_items(conn, index_all: bool):
         ORDER BY mi.item_type, mi.title
     """
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(q)
+        cur.execute(q, tuple(params))
         return cur.fetchall()
+
+
+def content_hash(item: dict) -> str:
+    """Fingerprint of everything that affects the indexed document. When it
+    changes (edited abstract, replaced file, new link), the item is re-embedded."""
+    parts = [
+        str(item.get(k) or "")
+        for k in (
+            "title", "item_type", "format", "file_path", "external_url", "status",
+            "abstract", "keywords", "tags", "rp_authors", "co_authors", "journal",
+            "conference", "doi", "team_members", "academic_year", "course_code",
+            "web_url", "github_repo", "app_download",
+        )
+    ]
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
 def index_item(conn, minio_client, item: dict) -> int:
@@ -224,6 +278,18 @@ def index_item(conn, minio_client, item: dict) -> int:
                 (item_id, idx, chunk, embedding),
             )
             indexed += 1
+
+        cur.execute(
+            """
+            INSERT INTO rag_index_state (item_id, content_hash, chunk_count, indexed_at)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (item_id) DO UPDATE
+            SET content_hash = EXCLUDED.content_hash,
+                chunk_count  = EXCLUDED.chunk_count,
+                indexed_at   = NOW()
+            """,
+            (item_id, content_hash(item), indexed),
+        )
     conn.commit()
     return indexed
 
