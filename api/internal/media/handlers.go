@@ -524,6 +524,14 @@ func (h *Handler) GetMedia(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func isImageFormat(format string) bool {
+	switch strings.ToLower(format) {
+	case "jpg", "jpeg", "png", "gif":
+		return true
+	}
+	return false
+}
+
 // GET /api/v1/media/{itemId}/download — streams the file directly to the client
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "itemId")
@@ -563,11 +571,20 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		contentType = "image/jpeg"
 	case "png":
 		contentType = "image/png"
+	case "gif":
+		contentType = "image/gif"
+	}
+
+	// ?inline=1 renders the file in the browser instead of forcing a download.
+	// Only honoured for image formats, so other types still download as before.
+	disposition := "attachment"
+	if r.URL.Query().Get("inline") == "1" && isImageFormat(format) {
+		disposition = "inline"
 	}
 
 	filename := title + "." + format
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Content-Disposition", disposition+`; filename="`+filename+`"`)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 
 	if _, err := io.Copy(w, obj); err != nil {

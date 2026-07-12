@@ -22,7 +22,8 @@ import {
   AlertCircle,
   ArrowLeft,
   Edit,
-  ExternalLink
+  ExternalLink,
+  Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +32,9 @@ interface MediaDetailViewProps {
   itemType: string;
 }
 
+const IMAGE_FORMATS = ["jpg", "jpeg", "png", "gif"];
+const isImageFormat = (format?: string) => !!format && IMAGE_FORMATS.includes(format.toLowerCase());
+
 export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -38,6 +42,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", abstract: "", keywords: "" });
 
@@ -45,6 +50,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
     try {
       setIsLoading(true);
       setError(null);
+      setImageFailed(false);
       const data = await apiClient.getMediaItem(itemId);
       setItem(data);
       setEditForm({
@@ -115,6 +121,8 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   }
 
   const canEdit = user && (user.user_id === item.created_by || user.role_tier === "administrator" || user.role_tier === "librarian");
+  const showImage = item.file_path && isImageFormat(item.format) && !imageFailed;
+  const imageUrl = `/api/v1/media/${itemId}/download?inline=1`;
 
   return (
     <div className="container max-w-4xl px-4 py-8">
@@ -128,6 +136,27 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
           </Button>
         )}
       </div>
+
+      {showImage && (
+        <Card className="mb-6 overflow-hidden">
+          <a href={imageUrl} target="_blank" rel="noopener noreferrer" title="Open full size">
+            <img
+              src={imageUrl}
+              alt={item.title}
+              onError={() => setImageFailed(true)}
+              className="block max-h-[70vh] w-full bg-muted object-contain"
+            />
+          </a>
+          <div className="flex items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <ImageIcon className="h-3.5 w-3.5" /> {item.format?.toUpperCase()} image
+            </span>
+            <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              View full size
+            </a>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

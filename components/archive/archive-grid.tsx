@@ -26,6 +26,28 @@ const accessTierConfig = {
   restricted: { label: "Restricted", variant: "destructive" as const },
 };
 
+const IMAGE_FORMATS = ["jpg", "jpeg", "png", "gif"];
+const isImageFormat = (format?: string) => !!format && IMAGE_FORMATS.includes(format.toLowerCase());
+
+function ArchiveThumbnail({ item }: { item: MediaItem }) {
+  const [failed, setFailed] = useState(false);
+  if (!item.file_path || !isImageFormat(item.format) || failed) return null;
+  return (
+    <Link
+      href={`/archive/${item.item_id}`}
+      className="-mt-6 -mx-6 mb-3 block overflow-hidden rounded-t-xl bg-muted"
+    >
+      <img
+        src={`/api/v1/media/${item.item_id}/download?inline=1`}
+        alt={item.title}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-40 w-full object-cover"
+      />
+    </Link>
+  );
+}
+
 function ArchiveGridInner() {
   const searchParams = useSearchParams();
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -124,8 +146,9 @@ function ArchiveGridInner() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
-          <Card key={item.item_id} className="flex flex-col">
+          <Card key={item.item_id} className="flex flex-col overflow-hidden">
             <CardHeader className="flex-1">
+              <ArchiveThumbnail item={item} />
               <div className="flex items-start justify-between gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <FolderOpen className="h-5 w-5 text-primary" />
