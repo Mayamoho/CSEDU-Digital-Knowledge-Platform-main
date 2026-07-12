@@ -52,6 +52,12 @@ func main() {
 		time.Sleep(2 * time.Second)
 	}
 
+	// Self-heal the catalog's topic column in case migration 005 wasn't applied
+	// by the deploy script (non-fatal — the rest of the API still boots).
+	if err := library.EnsureTopicColumn(ctx, pool); err != nil {
+		log.Printf("api: ensure topic column: %v", err)
+	}
+
 	minio, err := storage.NewMinio(context.Background())
 	if err != nil {
 		log.Fatalf("minio connect: %v", err)

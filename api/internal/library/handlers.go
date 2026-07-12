@@ -20,6 +20,58 @@ type Handler struct{ db *pgxpool.Pool }
 
 func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
 
+// backfillTopicsSQL classifies existing books into subjects from title
+// keywords. It mirrors, in the same specific-first order, migration
+// 005_book_topics.sql and the Go DeriveTopic helper.
+const backfillTopicsSQL = `
+UPDATE library_catalog SET topic = CASE
+    WHEN lower(title) ~ 'deep learning'                                              THEN 'Deep Learning'
+    WHEN lower(title) ~ 'machine learning'                                           THEN 'Machine Learning'
+    WHEN lower(title) ~ 'artificial intelligence' OR lower(title) ~ '\yai\y'         THEN 'Artificial Intelligence'
+    WHEN lower(title) ~ 'data structure'                                             THEN 'Data Structures'
+    WHEN lower(title) ~ 'algorithm'                                                  THEN 'Algorithms'
+    WHEN lower(title) ~ 'database|\ysql\y'                                           THEN 'Databases'
+    WHEN lower(title) ~ 'operating system'                                           THEN 'Operating Systems'
+    WHEN lower(title) ~ 'network'                                                    THEN 'Networking'
+    WHEN lower(title) ~ 'compiler'                                                   THEN 'Compilers'
+    WHEN lower(title) ~ 'architecture|organization'                                  THEN 'Computer Architecture'
+    WHEN lower(title) ~ 'software engineering'                                       THEN 'Software Engineering'
+    WHEN lower(title) ~ 'data science|data mining|big data'                          THEN 'Data Science'
+    WHEN lower(title) ~ 'security|cryptograph|cyber'                                 THEN 'Security'
+    WHEN lower(title) ~ 'web|html|javascript|react'                                  THEN 'Web Development'
+    WHEN lower(title) ~ 'discrete|calculus|algebra|mathematic|probabilit|statistic'  THEN 'Mathematics'
+    WHEN lower(title) ~ 'python|java|c\+\+|programming|coding'                        THEN 'Programming'
+    WHEN lower(title) ~ 'computation|automata'                                       THEN 'Theory of Computation'
+    ELSE 'General'
+END
+WHERE topic = 'General'`
+
+// EnsureTopicColumn guarantees library_catalog has a back-filled `topic` column
+// so the catalog keeps working even when the deploy script's psql migration step
+// was skipped or failed. Idempotent and cheap: it no-ops once the column exists.
+func EnsureTopicColumn(ctx context.Context, db *pgxpool.Pool) error {
+	var hasTopic bool
+	if err := db.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'library_catalog' AND column_name = 'topic'
+		)`).Scan(&hasTopic); err != nil {
+		return err
+	}
+	if hasTopic {
+		return nil
+	}
+	if _, err := db.Exec(ctx,
+		`ALTER TABLE library_catalog ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT 'General'`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(ctx, backfillTopicsSQL); err != nil {
+		return err
+	}
+	_, _ = db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_catalog_topic ON library_catalog (topic)`)
+	return nil
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
