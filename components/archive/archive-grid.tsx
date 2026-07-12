@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FolderOpen, Calendar, User, Download, Eye, Archive, ExternalLink } from "lucide-react";
+import { CatalogPagination } from "@/components/catalog/catalog-pagination";
 
 const accessTierConfig = {
   public: { label: "Public", variant: "default" as const },
@@ -223,10 +224,11 @@ function ArchiveGridInner() {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex justify-center mt-6">
-          <div className="text-sm text-muted-foreground">
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <CatalogPagination currentPage={page} totalPages={totalPages} basePath="/archive" />
+          <p className="text-sm text-muted-foreground">
             Page {page} of {totalPages}
-          </div>
+          </p>
         </div>
       )}
     </div>

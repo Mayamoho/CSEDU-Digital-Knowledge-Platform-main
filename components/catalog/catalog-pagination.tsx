@@ -14,16 +14,18 @@ import {
 interface CatalogPaginationProps {
   currentPage: number;
   totalPages: number;
+  /** Route the page links point at — the archive list reuses this component. */
+  basePath?: string;
 }
 
-export function CatalogPagination({ currentPage, totalPages }: CatalogPaginationProps) {
+export function CatalogPagination({ currentPage, totalPages, basePath = "/catalog" }: CatalogPaginationProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const createPageUrl = (page: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(page));
-    return `/catalog?${params.toString()}`;
+    return `${basePath}?${params.toString()}`;
   };
 
   const handlePageChange = (page: number) => {

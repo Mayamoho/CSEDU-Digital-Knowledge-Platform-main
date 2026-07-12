@@ -22,6 +22,9 @@ class HybridRetriever:
         query_embedding = embedder.embed_text(query)
 
         results = []
+        # Inventory first: "how many books" / "list all archives" cannot be answered
+        # from top-k chunks, so hand the model exact counts and the full title list.
+        results.extend(self._corpus_inventory(query, access_tiers))
         # Vector search (media_items: research/projects/archives)
         results.extend(self._vector_search(query_embedding, access_tiers))
         # Catalog search (library books)
@@ -42,6 +45,116 @@ class HybridRetriever:
             logger.info(f"  [{u.get('source', '?')}] {u.get('title', '?')}")
 
         return unique[: self.top_k]
+
+    # Counting / listing questions ("how many books", "list all archives") are the one
+    # thing top-k chunk retrieval is structurally bad at: it returns the k most similar
+    # chunks, never the whole set, so the model confidently counts whatever it was handed.
+    # These queries get an exact, complete inventory instead.
+    _INVENTORY_INTENT = [
+        "how many", "how much", "number of", "count", "total", "list all", "list the",
+        "all the", "show all", "every", "inventory", "কয়টি", "কতটি", "কতগুলো", "তালিকা", "সব",
+    ]
+    _TYPE_KEYWORDS = {
+        "book": ["book", "catalog", "catalogue", "library", "textbook", "বই", "লাইব্রেরি"],
+        "archive": ["archive", "archives", "আর্কাইভ"],
+        "project": ["project", "projects", "প্রকল্প"],
+        "research": ["research", "paper", "papers", "publication", "গবেষণা"],
+    }
+    _INVENTORY_TITLE_LIMIT = 60
+
+    def _corpus_inventory(self, query: str, access_tiers: List[str]) -> List[Dict]:
+        q = query.lower()
+        if not any(kw in q for kw in self._INVENTORY_INTENT):
+            return []
+
+        wanted = [t for t, kws in self._TYPE_KEYWORDS.items() if any(k in q for k in kws)]
+        if not wanted:
+            wanted = list(self._TYPE_KEYWORDS)  # "how many resources do you have?"
+
+        out: List[Dict] = []
+        if "book" in wanted:
+            out.extend(self._catalog_inventory())
+        media_types = [t for t in wanted if t != "book"]
+        if media_types:
+            out.extend(self._media_inventory(media_types, access_tiers))
+        return out
+
+    def _catalog_inventory(self) -> List[Dict]:
+        try:
+            rows = db.execute_query(
+                """
+                SELECT title, coalesce(author, 'Unknown') AS author,
+                       coalesce(topic, 'General') AS topic,
+                       available_copies, total_copies
+                FROM library_catalog
+                ORDER BY topic, title
+                """
+            ) or []
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Catalog inventory error: {e}")
+            return []
+        if not rows:
+            return []
+
+        lines = [
+            f"The library catalog holds {len(rows)} books in total. "
+            f"This is the complete list — no other books exist in the catalog:"
+        ]
+        for i, r in enumerate(rows[: self._INVENTORY_TITLE_LIMIT], 1):
+            lines.append(
+                f"{i}. {r['title']} — {r['author']} [topic: {r['topic']}] "
+                f"({r['available_copies']}/{r['total_copies']} available)"
+            )
+        return [{
+            "item_id": "inventory-catalog",
+            "title": "Library catalog — complete book list",
+            "item_type": "inventory",
+            "access_tier": "public",
+            "source": "inventory",
+            "chunk_text": "\n".join(lines),
+            "score": 1.0,
+        }]
+
+    def _media_inventory(self, media_types: List[str], access_tiers: List[str]) -> List[Dict]:
+        try:
+            rows = db.execute_query(
+                """
+                SELECT item_id::text, title, item_type, format
+                FROM media_items
+                WHERE status = 'published'
+                  AND access_tier = ANY(%s)
+                  AND item_type = ANY(%s)
+                ORDER BY item_type, title
+                """,
+                (access_tiers, media_types),
+            ) or []
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Media inventory error: {e}")
+            return []
+
+        out: List[Dict] = []
+        for mtype in media_types:
+            items = [r for r in rows if r["item_type"] == mtype]
+            if not items:
+                continue
+            label = {"archive": "archive items", "project": "student projects",
+                     "research": "research papers"}.get(mtype, mtype)
+            lines = [
+                f"The platform has {len(items)} published {label} that this user is allowed to see. "
+                f"This is the complete list — do not claim there are others:"
+            ]
+            for i, r in enumerate(items[: self._INVENTORY_TITLE_LIMIT], 1):
+                lines.append(f"{i}. {r['title']} ({(r['format'] or '').upper()})")
+            out.append({
+                "item_id": f"inventory-{mtype}",
+                "title": f"{label.capitalize()} — complete list",
+                "item_type": "inventory",
+                "access_tier": "public",
+                "source": "inventory",
+                "chunk_text": "\n".join(lines),
+                "score": 1.0,
+            })
+        return out
 
     def _get_access_tiers(self, role: str) -> List[str]:
         role_mapping = {
