@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -34,6 +35,7 @@ type catalogItem struct {
 	Title           string  `json:"title"`
 	Author          string  `json:"author"`
 	ISBN            *string `json:"isbn"`
+	Topic           string  `json:"topic"`
 	Format          string  `json:"format"`
 	Status          string  `json:"status"`
 	Location        *string `json:"location"`
@@ -54,9 +56,10 @@ type paginatedCatalog struct {
 // GET /api/v1/library/catalog
 func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	topic := strings.TrimSpace(r.URL.Query().Get("topic"))
 	format := r.URL.Query().Get("format")
-	// Hierarchy: availability -> format -> year. "status" kept as an alias for
-	// availability for backward compatibility.
+	// Hierarchy: topic -> availability -> format -> year. "status" kept as an
+	// alias for availability for backward compatibility.
 	availability := r.URL.Query().Get("availability")
 	if availability == "" {
 		availability = r.URL.Query().Get("status")
@@ -82,8 +85,14 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 			to_tsvector('english', title) @@ plainto_tsquery('english', $`+strconv.Itoa(argIdx)+`)
 			OR to_tsvector('english', author) @@ plainto_tsquery('english', $`+strconv.Itoa(argIdx)+`)
 			OR isbn ILIKE '%' || $`+strconv.Itoa(argIdx)+` || '%'
+			OR topic ILIKE '%' || $`+strconv.Itoa(argIdx)+` || '%'
 		)`)
 		args = append(args, q)
+		argIdx++
+	}
+	if topic != "" {
+		where = append(where, `topic = $`+strconv.Itoa(argIdx))
+		args = append(args, topic)
 		argIdx++
 	}
 	// availability is derived from available_copies
@@ -106,8 +115,8 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 
 	whereClause := strings.Join(where, " AND ")
 
-	// Dependent facet counts for the availability -> format -> year hierarchy.
-	facets := h.catalogFacets(r.Context(), q, availability, format)
+	// Dependent facet counts for the topic -> availability -> format -> year hierarchy.
+	facets := h.catalogFacets(r.Context(), q, topic, availability, format)
 
 	// Count
 	countArgs := make([]any, len(args))
@@ -126,7 +135,7 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 	offsetIdx := argIdx + 1
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT catalog_id, title, author, isbn, format, available_copies,
+		`SELECT catalog_id, title, author, isbn, topic, format, available_copies,
 		        total_copies, location, cover_image, year
 		 FROM library_catalog
 		 WHERE `+whereClause+`
@@ -144,7 +153,7 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 		var it catalogItem
 		var availCopies, totalCopies int
 		if err := rows.Scan(&it.ItemID, &it.Title, &it.Author, &it.ISBN,
-			&it.Format, &availCopies, &totalCopies,
+			&it.Topic, &it.Format, &availCopies, &totalCopies,
 			&it.Location, &it.CoverImage, &it.Year); err != nil {
 			continue
 		}
@@ -177,11 +186,12 @@ type facetBucket struct {
 	Count int    `json:"count"`
 }
 
-// catalogFacets builds the availability -> format -> year facet tree. Each
-// level's counts respect the selections at the levels above it (and the search
-// query), so the UI can show live counts as the user drills down.
-func (h *Handler) catalogFacets(ctx context.Context, q, availability, format string) map[string][]facetBucket {
+// catalogFacets builds the topic -> availability -> format -> year facet tree.
+// Each level's counts respect the selections at the levels above it (and the
+// search query), so the UI can show live counts as the user drills down.
+func (h *Handler) catalogFacets(ctx context.Context, q, topic, availability, format string) map[string][]facetBucket {
 	out := map[string][]facetBucket{
+		"topic":        {},
 		"availability": {},
 		"format":       {},
 		"year":         {},
@@ -193,8 +203,32 @@ func (h *Handler) catalogFacets(ctx context.Context, q, availability, format str
 	if q != "" {
 		base = `(to_tsvector('english', title) @@ plainto_tsquery('english', $1)
 			OR to_tsvector('english', author) @@ plainto_tsquery('english', $1)
-			OR isbn ILIKE '%' || $1 || '%')`
+			OR isbn ILIKE '%' || $1 || '%'
+			OR topic ILIKE '%' || $1 || '%')`
 		baseArgs = append(baseArgs, q)
+	}
+
+	// Level 1: topic (counts ignore the topic selection itself, respecting q).
+	tRows, err := h.db.Query(ctx,
+		`SELECT topic, COUNT(*) FROM library_catalog
+		 WHERE `+base+`
+		 GROUP BY topic ORDER BY topic`, baseArgs...)
+	if err == nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var b facetBucket
+			if tRows.Scan(&b.Value, &b.Count) == nil {
+				b.Label = b.Value
+				out["topic"] = append(out["topic"], b)
+			}
+		}
+	}
+
+	// Once a topic is chosen, the lower levels are scoped to it.
+	topicCond := ""
+	if topic != "" {
+		baseArgs = append(baseArgs, topic)
+		topicCond = ` AND topic = $` + strconv.Itoa(len(baseArgs))
 	}
 
 	availCond := func() string {
@@ -207,12 +241,12 @@ func (h *Handler) catalogFacets(ctx context.Context, q, availability, format str
 		return ""
 	}()
 
-	// Level 1: availability (counts ignore availability selection itself).
+	// Level 2: availability within selected topic.
 	var avail, borrowed int
 	_ = h.db.QueryRow(ctx,
 		`SELECT COUNT(*) FILTER (WHERE available_copies > 0),
 		        COUNT(*) FILTER (WHERE available_copies = 0)
-		 FROM library_catalog WHERE `+base, baseArgs...).Scan(&avail, &borrowed)
+		 FROM library_catalog WHERE `+base+topicCond, baseArgs...).Scan(&avail, &borrowed)
 	if avail > 0 {
 		out["availability"] = append(out["availability"], facetBucket{"available", "Available", avail})
 	}
@@ -220,10 +254,10 @@ func (h *Handler) catalogFacets(ctx context.Context, q, availability, format str
 		out["availability"] = append(out["availability"], facetBucket{"borrowed", "Currently Borrowed", borrowed})
 	}
 
-	// Level 2: format within selected availability.
+	// Level 3: format within selected topic + availability.
 	fRows, err := h.db.Query(ctx,
 		`SELECT format, COUNT(*) FROM library_catalog
-		 WHERE `+base+availCond+`
+		 WHERE `+base+topicCond+availCond+`
 		 GROUP BY format ORDER BY COUNT(*) DESC, format`, baseArgs...)
 	if err == nil {
 		defer fRows.Close()
@@ -236,12 +270,12 @@ func (h *Handler) catalogFacets(ctx context.Context, q, availability, format str
 		}
 	}
 
-	// Level 3: year within availability + format (only once a format is chosen).
+	// Level 4: year within topic + availability + format (only once a format is chosen).
 	if format != "" {
 		yArgs := append(append([]any{}, baseArgs...), format)
 		yRows, err := h.db.Query(ctx,
 			`SELECT year, COUNT(*) FROM library_catalog
-			 WHERE `+base+availCond+` AND format = $`+strconv.Itoa(len(baseArgs)+1)+` AND year IS NOT NULL
+			 WHERE `+base+topicCond+availCond+` AND format = $`+strconv.Itoa(len(baseArgs)+1)+` AND year IS NOT NULL
 			 GROUP BY year ORDER BY year DESC`, yArgs...)
 		if err == nil {
 			defer yRows.Close()
@@ -268,17 +302,105 @@ func titleCase(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// aiWordRe matches "ai" as a standalone word so titles like "AI in Practice"
+// classify as Artificial Intelligence without also catching words like "chain".
+var aiWordRe = regexp.MustCompile(`\bai\b`)
+
+// DeriveTopic classifies a book into a subject from keywords in its title
+// (exported for reuse by the admin CSV importer). It mirrors, in the same
+// specific-first order, the back-fill CASE in migration 005_book_topics.sql so
+// books added after the migration are bucketed the same way existing rows were.
+// Used when a caller omits an explicit topic.
+func DeriveTopic(title string) string {
+	t := strings.ToLower(title)
+	switch {
+	case strings.Contains(t, "deep learning"):
+		return "Deep Learning"
+	case strings.Contains(t, "machine learning"):
+		return "Machine Learning"
+	case strings.Contains(t, "artificial intelligence") || aiWordRe.MatchString(t):
+		return "Artificial Intelligence"
+	case strings.Contains(t, "data structure"):
+		return "Data Structures"
+	case strings.Contains(t, "algorithm"):
+		return "Algorithms"
+	case strings.Contains(t, "database") || strings.Contains(t, "sql"):
+		return "Databases"
+	case strings.Contains(t, "operating system"):
+		return "Operating Systems"
+	case strings.Contains(t, "network"):
+		return "Networking"
+	case strings.Contains(t, "compiler"):
+		return "Compilers"
+	case strings.Contains(t, "architecture") || strings.Contains(t, "organization"):
+		return "Computer Architecture"
+	case strings.Contains(t, "software engineering"):
+		return "Software Engineering"
+	case strings.Contains(t, "data science") || strings.Contains(t, "data mining") || strings.Contains(t, "big data"):
+		return "Data Science"
+	case strings.Contains(t, "security") || strings.Contains(t, "cryptograph") || strings.Contains(t, "cyber"):
+		return "Security"
+	case strings.Contains(t, "web") || strings.Contains(t, "html") || strings.Contains(t, "javascript") || strings.Contains(t, "react"):
+		return "Web Development"
+	case strings.Contains(t, "discrete") || strings.Contains(t, "calculus") || strings.Contains(t, "algebra") ||
+		strings.Contains(t, "mathematic") || strings.Contains(t, "probabilit") || strings.Contains(t, "statistic"):
+		return "Mathematics"
+	case strings.Contains(t, "python") || strings.Contains(t, "java") || strings.Contains(t, "c++") ||
+		strings.Contains(t, "programming") || strings.Contains(t, "coding"):
+		return "Programming"
+	case strings.Contains(t, "computation") || strings.Contains(t, "automata"):
+		return "Theory of Computation"
+	default:
+		return "General"
+	}
+}
+
+// topicSummary is one subject section on the catalog landing view.
+type topicSummary struct {
+	Topic     string `json:"topic"`
+	Total     int    `json:"total"`
+	Available int    `json:"available"`
+}
+
+// GET /api/v1/library/catalog/topics
+// Lists every subject present in the catalog with its book counts, so the
+// catalog page can render a topic-wise overview that links into each topic's
+// own paginated grid.
+func (h *Handler) ListTopics(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT topic, COUNT(*),
+		        COUNT(*) FILTER (WHERE available_copies > 0)
+		 FROM library_catalog
+		 GROUP BY topic
+		 ORDER BY topic`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+
+	topics := []topicSummary{}
+	for rows.Next() {
+		var t topicSummary
+		if err := rows.Scan(&t.Topic, &t.Total, &t.Available); err != nil {
+			continue
+		}
+		topics = append(topics, t)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": topics, "total": len(topics)})
+}
+
 // GET /api/v1/library/catalog/{itemId}
 func (h *Handler) GetCatalogItem(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "itemId")
 	var it catalogItem
 	var availCopies, totalCopies int
 	err := h.db.QueryRow(r.Context(),
-		`SELECT catalog_id, title, author, isbn, format, available_copies,
+		`SELECT catalog_id, title, author, isbn, topic, format, available_copies,
 		        total_copies, location, cover_image, year
 		 FROM library_catalog WHERE catalog_id = $1`, id,
 	).Scan(&it.ItemID, &it.Title, &it.Author, &it.ISBN,
-		&it.Format, &availCopies, &totalCopies,
+		&it.Topic, &it.Format, &availCopies, &totalCopies,
 		&it.Location, &it.CoverImage, &it.Year)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "item not found")
@@ -797,6 +919,7 @@ func (h *Handler) AddBook(w http.ResponseWriter, r *http.Request) {
 		Title       string  `json:"title"`
 		Author      string  `json:"author"`
 		ISBN        *string `json:"isbn"`
+		Topic       string  `json:"topic"`
 		Format      string  `json:"format"`
 		Location    *string `json:"location"`
 		Year        *int    `json:"year"`
@@ -814,16 +937,22 @@ func (h *Handler) AddBook(w http.ResponseWriter, r *http.Request) {
 	if req.Format == "" {
 		req.Format = "book"
 	}
+	// Topic is chosen on the add-book form; fall back to keyword classification
+	// of the title when it's left blank so every book still lands in a section.
+	req.Topic = strings.TrimSpace(req.Topic)
+	if req.Topic == "" {
+		req.Topic = DeriveTopic(req.Title)
+	}
 	if req.TotalCopies < 1 {
 		req.TotalCopies = 1
 	}
 
 	var catalogID string
 	err := h.db.QueryRow(r.Context(),
-		`INSERT INTO library_catalog (title, author, isbn, format, location, year, total_copies, available_copies, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8)
+		`INSERT INTO library_catalog (title, author, isbn, topic, format, location, year, total_copies, available_copies, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
 		 RETURNING catalog_id`,
-		req.Title, req.Author, req.ISBN, req.Format, req.Location, req.Year, req.TotalCopies, userID,
+		req.Title, req.Author, req.ISBN, req.Topic, req.Format, req.Location, req.Year, req.TotalCopies, userID,
 	).Scan(&catalogID)
 
 	if err != nil {
@@ -866,7 +995,7 @@ func (h *Handler) GetMyAddedBooks(w http.ResponseWriter, r *http.Request) {
 
 	// Get books
 	rows, err := h.db.Query(r.Context(),
-		`SELECT catalog_id, title, author, isbn, format, available_copies,
+		`SELECT catalog_id, title, author, isbn, topic, format, available_copies,
 		        total_copies, location, cover_image, year,
 		        to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		 FROM library_catalog
@@ -884,6 +1013,7 @@ func (h *Handler) GetMyAddedBooks(w http.ResponseWriter, r *http.Request) {
 		Title           string  `json:"title"`
 		Author          string  `json:"author"`
 		ISBN            *string `json:"isbn"`
+		Topic           string  `json:"topic"`
 		Format          string  `json:"format"`
 		AvailableCopies int     `json:"available_copies"`
 		TotalCopies     int     `json:"total_copies"`
@@ -897,7 +1027,7 @@ func (h *Handler) GetMyAddedBooks(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var b bookItem
 		if err := rows.Scan(&b.CatalogID, &b.Title, &b.Author, &b.ISBN,
-			&b.Format, &b.AvailableCopies, &b.TotalCopies,
+			&b.Topic, &b.Format, &b.AvailableCopies, &b.TotalCopies,
 			&b.Location, &b.CoverImage, &b.Year, &b.CreatedAt); err != nil {
 			continue
 		}

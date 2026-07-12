@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { CatalogSearch } from "@/components/catalog/catalog-search";
-import { CatalogGrid } from "@/components/catalog/catalog-grid";
-import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { CatalogBrowser } from "@/components/catalog/catalog-browser";
 import { LibrarianCatalogTools } from "@/components/catalog/librarian-catalog-tools";
 
 export const metadata: Metadata = {
@@ -38,22 +36,8 @@ export default function CatalogPage() {
         </Suspense>
 
         <Suspense fallback={<CatalogLoading />}>
-          <CatalogSearch />
+          <CatalogBrowser />
         </Suspense>
-
-        <div className="flex flex-col lg:flex-row gap-6">
-          <aside className="w-full lg:w-64 shrink-0">
-            <Suspense fallback={<CatalogLoading />}>
-              <CatalogFilters />
-            </Suspense>
-          </aside>
-
-          <div className="flex-1">
-            <Suspense fallback={<CatalogLoading />}>
-              <CatalogGrid />
-            </Suspense>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -97,6 +97,7 @@ CREATE TABLE library_catalog (
     title            TEXT        NOT NULL,
     author           TEXT        NOT NULL,
     isbn             TEXT,
+    topic            TEXT        NOT NULL DEFAULT 'General',
     format           TEXT        NOT NULL DEFAULT 'book',
     location         TEXT,
     cover_image      TEXT,
@@ -110,6 +111,7 @@ CREATE TABLE library_catalog (
 CREATE INDEX idx_catalog_title  ON library_catalog USING GIN (to_tsvector('english', title));
 CREATE INDEX idx_catalog_author ON library_catalog USING GIN (to_tsvector('english', author));
 CREATE INDEX idx_catalog_isbn   ON library_catalog (isbn);
+CREATE INDEX idx_catalog_topic  ON library_catalog (topic);
 
 -- ============================================================
 -- LOANS

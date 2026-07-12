@@ -18,6 +18,8 @@ echo ""
 echo "1b. Applying database migrations..."
 docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U csedu_user -d csedu_platform < infra/db/migrations/002_media_url_format.sql || true
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U csedu_user -d csedu_platform < infra/db/migrations/005_book_topics.sql || true
 
 # Rebuild frontend, API and RAG service with all fixes
 echo ""

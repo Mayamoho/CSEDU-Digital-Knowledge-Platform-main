@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/library"
 )
 
 type Handler struct{ db *pgxpool.Pool }
@@ -190,7 +191,7 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 // Export full library catalog as CSV (staff/admin only).
 func (h *Handler) ExportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT catalog_id, title, author, COALESCE(isbn,''), format,
+		`SELECT catalog_id, title, author, COALESCE(isbn,''), topic, format,
 		        COALESCE(location,''), COALESCE(year::text,''),
 		        total_copies, available_copies
 		 FROM library_catalog
@@ -206,19 +207,19 @@ func (h *Handler) ExportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{
-		"catalog_id", "title", "author", "isbn", "format",
+		"catalog_id", "title", "author", "isbn", "topic", "format",
 		"location", "year", "total_copies", "available_copies",
 	})
 
 	for rows.Next() {
-		var id, title, author, isbn, format, location, year string
+		var id, title, author, isbn, topic, format, location, year string
 		var total, available int
-		if err := rows.Scan(&id, &title, &author, &isbn, &format,
+		if err := rows.Scan(&id, &title, &author, &isbn, &topic, &format,
 			&location, &year, &total, &available); err != nil {
 			continue
 		}
 		_ = cw.Write([]string{
-			id, title, author, isbn, format, location, year,
+			id, title, author, isbn, topic, format, location, year,
 			strconv.Itoa(total), strconv.Itoa(available),
 		})
 	}
@@ -292,6 +293,12 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 		if format == "" {
 			format = "book"
 		}
+		// Topic column is optional; classify from the title when absent so
+		// bulk-imported books still land in a subject section.
+		topic := get(row, "topic")
+		if topic == "" {
+			topic = library.DeriveTopic(title)
+		}
 		location := get(row, "location")
 		yearStr := get(row, "year")
 		totalStr := get(row, "total_copies")
@@ -309,16 +316,17 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 			// Upsert by ISBN
 			tag, err := h.db.Exec(r.Context(),
 				`INSERT INTO library_catalog
-				   (title, author, isbn, format, location, year, total_copies, available_copies)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+				   (title, author, isbn, topic, format, location, year, total_copies, available_copies)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
 				 ON CONFLICT (isbn) DO UPDATE SET
 				   title            = EXCLUDED.title,
 				   author           = EXCLUDED.author,
+				   topic            = EXCLUDED.topic,
 				   format           = EXCLUDED.format,
 				   location         = EXCLUDED.location,
 				   year             = EXCLUDED.year,
 				   total_copies     = EXCLUDED.total_copies`,
-				title, author, isbn, format, location, yearVal, totalCopies)
+				title, author, isbn, topic, format, location, yearVal, totalCopies)
 			if err != nil {
 				skipped++
 				continue
@@ -332,9 +340,9 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 			// No ISBN — always insert
 			_, err := h.db.Exec(r.Context(),
 				`INSERT INTO library_catalog
-				   (title, author, format, location, year, total_copies, available_copies)
-				 VALUES ($1,$2,$3,$4,$5,$6,$6)`,
-				title, author, format, location, yearVal, totalCopies)
+				   (title, author, topic, format, location, year, total_copies, available_copies)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
+				title, author, topic, format, location, yearVal, totalCopies)
 			if err != nil {
 				skipped++
 				continue

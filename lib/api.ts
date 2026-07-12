@@ -73,6 +73,7 @@ export interface LibraryCatalogItem {
   title: string;
   author: string;
   isbn: string | null;
+  topic: string;
   format: string;
   status: 'available' | 'borrowed' | 'reserved';
   location: string | null;
@@ -144,11 +145,18 @@ export interface CashRequest {
   title: string;
 }
 
+export interface CatalogTopic {
+  topic: string;
+  total: number;
+  available: number;
+}
+
 export interface AddedBook {
   catalog_id: string;
   title: string;
   author: string;
   isbn?: string;
+  topic?: string;
   format?: string;
   available_copies: number;
   total_copies: number;
@@ -358,6 +366,11 @@ class APIClient {
     return this.request<PaginatedResponse<LibraryCatalogItem>>(`/library/catalog?${searchParams.toString()}`);
   }
 
+  // Topic-wise overview of the catalog — one entry per subject with counts.
+  async getCatalogTopics(): Promise<{ data: CatalogTopic[]; total: number }> {
+    return this.request(`/library/catalog/topics`);
+  }
+
   async getLibraryItem(itemId: string): Promise<LibraryCatalogItem> {
     return this.request<LibraryCatalogItem>(`/library/catalog/${itemId}`);
   }
@@ -513,6 +526,7 @@ class APIClient {
     title: string;
     author: string;
     isbn?: string;
+    topic?: string;
     format?: string;
     location?: string;
     year?: number;

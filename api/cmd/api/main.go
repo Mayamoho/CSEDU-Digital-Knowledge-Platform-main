@@ -133,6 +133,7 @@ func main() {
 			r.Route("/catalog", func(r chi.Router) {
 				// Public GET access
 				r.With(middleware.OptionalAuth).Get("/", libraryHandler.ListCatalog)
+				r.With(middleware.OptionalAuth).Get("/topics", libraryHandler.ListTopics)
 				r.With(middleware.OptionalAuth).Get("/{itemId}", libraryHandler.GetCatalogItem)
 				
 				// Librarian/admin POST access

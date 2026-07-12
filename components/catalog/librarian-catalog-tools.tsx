@@ -24,11 +24,20 @@ export function LibrarianCatalogTools() {
     title: "",
     author: "",
     isbn: "",
+    topic: "",
     format: "book",
     location: "",
     year: "",
     total_copies: "1",
   });
+
+  // Suggested subjects for the topic field; librarians may also type a new one.
+  const TOPIC_SUGGESTIONS = [
+    "Algorithms", "Data Structures", "Artificial Intelligence", "Machine Learning",
+    "Deep Learning", "Databases", "Operating Systems", "Networking", "Compilers",
+    "Computer Architecture", "Software Engineering", "Data Science", "Security",
+    "Web Development", "Mathematics", "Programming", "Theory of Computation", "General",
+  ];
 
   const handleSingleUpload = async () => {
     if (!bookData.title || !bookData.author) {
@@ -45,6 +54,7 @@ export function LibrarianCatalogTools() {
         total_copies: parseInt(bookData.total_copies) || 1,
       };
 
+      if (bookData.topic) data.topic = bookData.topic.trim();
       if (bookData.isbn) data.isbn = bookData.isbn;
       if (bookData.location) data.location = bookData.location;
       if (bookData.year) {
@@ -59,6 +69,7 @@ export function LibrarianCatalogTools() {
         title: "",
         author: "",
         isbn: "",
+        topic: "",
         format: "book",
         location: "",
         year: "",
@@ -152,6 +163,24 @@ export function LibrarianCatalogTools() {
                     onChange={(e) => setBookData({ ...bookData, isbn: e.target.value })}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="topic">Topic</Label>
+                  <Input
+                    id="topic"
+                    list="topic-suggestions"
+                    placeholder="e.g. Algorithms, Machine Learning"
+                    value={bookData.topic}
+                    onChange={(e) => setBookData({ ...bookData, topic: e.target.value })}
+                  />
+                  <datalist id="topic-suggestions">
+                    {TOPIC_SUGGESTIONS.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-muted-foreground">
+                    Groups the book on the catalog. Leave blank to auto-detect from the title.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="format">Format</Label>
@@ -217,7 +246,7 @@ export function LibrarianCatalogTools() {
               <DialogHeader>
                 <DialogTitle>Bulk CSV Upload</DialogTitle>
                 <DialogDescription>
-                  Upload a CSV file with multiple books. Format: title,author,isbn,format,location,year,total_copies
+                  Upload a CSV file with multiple books. Format: title,author,isbn,topic,format,location,year,total_copies
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -232,9 +261,9 @@ export function LibrarianCatalogTools() {
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <p className="font-semibold">CSV Format:</p>
-                  <p>title,author,isbn,format,location,year,total_copies</p>
+                  <p>title,author,isbn,topic,format,location,year,total_copies</p>
                   <p className="mt-2">Example:</p>
-                  <p className="text-xs">"Introduction to Algorithms","Thomas H. Cormen","9780262033848","book","CS-101",2022,5</p>
+                  <p className="text-xs">"Introduction to Algorithms","Thomas H. Cormen","9780262033848","Algorithms","book","CS-101",2022,5</p>
                 </div>
                 <Button
                   onClick={handleBulkUpload}

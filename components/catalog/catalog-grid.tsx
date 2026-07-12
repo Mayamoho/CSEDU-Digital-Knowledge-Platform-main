@@ -38,6 +38,7 @@ export function CatalogGrid() {
   const { checkPermission } = useRoleCheck();
 
   const query        = searchParams.get("q")            || "";
+  const topic        = searchParams.get("topic")        || "";
   const availability = searchParams.get("availability") || searchParams.get("status") || "";
   const format       = searchParams.get("format")       || "";
   const year         = searchParams.get("year")         || "";
@@ -50,6 +51,7 @@ export function CatalogGrid() {
     try {
       const res = await apiClient.getLibraryCatalog({
         q:            query || undefined,
+        topic:        topic || undefined,
         availability: availability || undefined,
         format:       format || undefined,
         year:         year || undefined,
@@ -64,7 +66,7 @@ export function CatalogGrid() {
     } finally {
       setIsLoading(false);
     }
-  }, [query, availability, format, year, page, perPage]);
+  }, [query, topic, availability, format, year, page, perPage]);
 
   useEffect(() => {
     fetchItems();
