@@ -21,7 +21,26 @@ import (
 	"github.com/csedu/platform/api/internal/storage"
 )
 
-const maxUploadSize = 50 << 20 // 50 MB
+// SDD Flow 1: per-type upload limits — PDF ≤ 100 MB, video ≤ 200 MB,
+// everything else 50 MB. maxUploadSize is the request-body ceiling.
+const (
+	defaultUploadSize = 50 << 20  // 50 MB
+	pdfUploadSize     = 100 << 20 // 100 MB
+	videoUploadSize   = 200 << 20 // 200 MB
+	maxUploadSize     = videoUploadSize
+)
+
+// sizeLimitFor returns the byte limit for a file extension.
+func sizeLimitFor(ext string) int64 {
+	switch ext {
+	case "pdf":
+		return pdfUploadSize
+	case "mp4":
+		return videoUploadSize
+	default:
+		return defaultUploadSize
+	}
+}
 
 type Handler struct {
 	db    *pgxpool.Pool
@@ -85,7 +104,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize+1024)
 	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "file too large or invalid form data")
+		writeError(w, http.StatusRequestEntityTooLarge, "file too large or invalid form data")
 		return
 	}
 
@@ -102,9 +121,13 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if hasFile && header.Size > maxUploadSize {
-		writeError(w, http.StatusBadRequest, "file exceeds 50 MB limit")
-		return
+	if hasFile {
+		uploadExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+		if limit := sizeLimitFor(uploadExt); header.Size > limit {
+			writeError(w, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("file exceeds the %d MB limit for .%s uploads", limit>>20, uploadExt))
+			return
+		}
 	}
 
 	// Metadata from form fields
@@ -745,7 +768,7 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize+1024)
 	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "file too large or invalid form data")
+		writeError(w, http.StatusRequestEntityTooLarge, "file too large or invalid form data")
 		return
 	}
 
@@ -756,8 +779,9 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if header.Size > maxUploadSize {
-		writeError(w, http.StatusBadRequest, "file exceeds 50 MB limit")
+	if replaceExt := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), ".")); header.Size > sizeLimitFor(replaceExt) {
+		writeError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("file exceeds the %d MB limit for .%s uploads", sizeLimitFor(replaceExt)>>20, replaceExt))
 		return
 	}
 
