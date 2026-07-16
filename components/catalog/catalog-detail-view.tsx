@@ -30,6 +30,7 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBorrowing, setIsBorrowing] = useState(false);
+  const [isPlacingHold, setIsPlacingHold] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,6 +61,18 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
       toast.error(err instanceof Error ? err.message : "Failed to borrow book");
     } finally {
       setIsBorrowing(false);
+    }
+  };
+
+  const handlePlaceHold = async () => {
+    try {
+      setIsPlacingHold(true);
+      const res = await apiClient.placeHold(itemId);
+      toast.success(`Hold placed — you are #${res.queue_position} in the queue`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to place hold");
+    } finally {
+      setIsPlacingHold(false);
     }
   };
 
@@ -204,8 +217,20 @@ export function CatalogDetailView({ itemId }: CatalogDetailViewProps) {
               {!isAvailable && (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    This book is currently unavailable. Please check back later or contact the library.
+                  <AlertDescription className="flex items-center justify-between gap-4">
+                    <span>
+                      This book is currently unavailable. Place a hold to be notified when a copy is returned.
+                    </span>
+                    {canBorrow && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handlePlaceHold}
+                        disabled={isPlacingHold}
+                      >
+                        {isPlacingHold ? "Placing hold..." : "Place Hold"}
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

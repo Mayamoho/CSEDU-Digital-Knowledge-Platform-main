@@ -92,6 +92,17 @@ export interface LoanItem {
   status: 'active' | 'returned' | 'overdue';
 }
 
+export interface HoldItem {
+  hold_id: string;
+  catalog_id: string;
+  title: string;
+  author: string;
+  placed_at: string;
+  expires_at: string | null;
+  status: 'active' | 'fulfilled' | 'cancelled';
+  queue_position: number;
+}
+
 export interface AdminLoanItem extends LoanItem {
   user_name: string;
   user_email: string;
@@ -381,6 +392,22 @@ class APIClient {
       method: 'POST',
       body: JSON.stringify({ catalog_id: catalogId }),
     });
+  }
+
+  // Hold / reservation endpoints
+  async placeHold(catalogId: string): Promise<{ message: string; hold_id: string; queue_position: number }> {
+    return this.request(`/library/holds`, {
+      method: 'POST',
+      body: JSON.stringify({ catalog_id: catalogId }),
+    });
+  }
+
+  async getMyHolds(): Promise<{ holds: HoldItem[] }> {
+    return this.request(`/library/holds`);
+  }
+
+  async cancelHold(holdId: string): Promise<{ message: string }> {
+    return this.request(`/library/holds/${holdId}`, { method: 'DELETE' });
   }
 
   // Media endpoints

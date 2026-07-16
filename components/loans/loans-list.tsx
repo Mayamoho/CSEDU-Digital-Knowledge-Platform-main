@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Calendar, AlertCircle, CheckCircle, User } from "lucide-react";
 import { toast } from "sonner";
+import { HoldsSection } from "./holds-section";
 
 export function LoansList() {
   const { user } = useAuth();
@@ -150,6 +151,9 @@ function MyLoansList() {
           )}
         </CardContent>
       </Card>
+
+      {/* Holds */}
+      <HoldsSection />
 
       {/* Borrowing History */}
       <Card>
