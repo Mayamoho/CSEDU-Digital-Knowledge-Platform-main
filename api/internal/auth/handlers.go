@@ -1,15 +1,18 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -78,9 +81,64 @@ func hashRefresh(token string) string {
 // Handler factory
 // ──────────────────────────────────────────────────────────────────────────────
 
-type Handler struct{ db *pgxpool.Pool }
+type Handler struct {
+	db    *pgxpool.Pool
+	redis *redis.Client
+}
 
-func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
+func NewHandler(db *pgxpool.Pool, rdb *redis.Client) *Handler {
+	return &Handler{db: db, redis: rdb}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Brute-force protection (FR-TXX-007 / NFR-TXX-039)
+// 5 failed attempts within a minute locks the account for 15 minutes.
+// Redis-backed; if Redis is unavailable the login path proceeds without
+// lockout rather than denying service.
+// ──────────────────────────────────────────────────────────────────────────────
+
+const (
+	maxFailedAttempts = 5
+	failWindow        = time.Minute
+	lockDuration      = 15 * time.Minute
+)
+
+func (h *Handler) isLocked(ctx context.Context, email string) bool {
+	if h.redis == nil {
+		return false
+	}
+	n, err := h.redis.Exists(ctx, "login_lock:"+email).Result()
+	return err == nil && n > 0
+}
+
+func (h *Handler) recordFailedLogin(ctx context.Context, email string) {
+	if h.redis == nil {
+		return
+	}
+	key := "login_fail:" + email
+	count, err := h.redis.Incr(ctx, key).Result()
+	if err != nil {
+		return
+	}
+	if count == 1 {
+		h.redis.Expire(ctx, key, failWindow)
+	}
+	if count >= maxFailedAttempts {
+		h.redis.Set(ctx, "login_lock:"+email, "1", lockDuration)
+		h.redis.Del(ctx, key)
+	}
+}
+
+func (h *Handler) clearFailedLogins(ctx context.Context, email string) {
+	if h.redis == nil {
+		return
+	}
+	h.redis.Del(ctx, "login_fail:"+email)
+}
+
+var lockedMsg = fmt.Sprintf(
+	"account temporarily locked after %d failed login attempts — try again in %d minutes",
+	maxFailedAttempts, int(lockDuration.Minutes()))
 
 // ──────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/register
@@ -188,6 +246,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
+	if h.isLocked(r.Context(), req.Email) {
+		writeError(w, http.StatusTooManyRequests, lockedMsg)
+		return
+	}
+
 	var userID, name, roleTier, hash string
 	var createdAt string
 	var lastLogin *string
@@ -201,14 +264,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Constant-time response to prevent user enumeration
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy"), []byte(req.Password))
+		h.recordFailedLogin(r.Context(), req.Email)
 		writeError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	if err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
+		h.recordFailedLogin(r.Context(), req.Email)
 		writeError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
+
+	h.clearFailedLogins(r.Context(), req.Email)
 
 	// Update last_login
 	_, _ = h.db.Exec(r.Context(),

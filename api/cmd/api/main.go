@@ -63,11 +63,6 @@ func main() {
 		log.Fatalf("minio connect: %v", err)
 	}
 
-	authHandler := auth.NewHandler(pool)
-	libraryHandler := library.NewHandler(pool)
-	loanHandler := loan.NewHandler(pool, minio)
-	fineHandler := fine.NewHandler(pool)
-
 	// Create Redis client
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -78,6 +73,11 @@ func main() {
 		log.Fatalf("redis parse URL: %v", err)
 	}
 	redisClient := redis.NewClient(opt)
+
+	authHandler := auth.NewHandler(pool, redisClient)
+	libraryHandler := library.NewHandler(pool)
+	loanHandler := loan.NewHandler(pool, minio)
+	fineHandler := fine.NewHandler(pool)
 
 	aiHandler := ai.NewHandler(pool, redisClient)
 	mediaHandler := media.NewHandler(pool, minio, redisClient)
@@ -160,6 +160,17 @@ func main() {
 				
 				// Staff/admin only
 				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllLoans)
+			})
+
+			// Hold / reservation routes
+			r.Route("/holds", func(r chi.Router) {
+				r.Use(middleware.Authenticate)
+				r.Post("/", libraryHandler.PlaceHold)
+				r.Get("/", libraryHandler.ListMyHolds)
+				r.Delete("/{holdId}", libraryHandler.CancelHold)
+
+				// Staff/admin only
+				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllHolds)
 			})
 
 			// Fine routes
