@@ -20,6 +20,10 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U csedu_user -d csedu_platform < infra/db/migrations/002_media_url_format.sql || true
 docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U csedu_user -d csedu_platform < infra/db/migrations/005_book_topics.sql || true
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U csedu_user -d csedu_platform < infra/db/migrations/006_rag_index_state.sql || true
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U csedu_user -d csedu_platform < infra/db/migrations/007_barcodes.sql || true
 
 # Rebuild frontend, API and RAG service with all fixes
 echo ""

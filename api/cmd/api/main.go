@@ -165,6 +165,15 @@ func main() {
 				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllLoans)
 			})
 
+			// Circulation desk — barcode checkout/return (librarian/admin)
+			r.Route("/circulation", func(r chi.Router) {
+				r.Use(middleware.Authenticate)
+				r.Use(middleware.RequireRole("librarian", "administrator"))
+				r.Post("/checkout", libraryHandler.CirculationCheckout)
+				r.Post("/return", libraryHandler.CirculationReturn)
+				r.Get("/lookup", libraryHandler.CirculationLookup)
+			})
+
 			// Hold / reservation routes
 			r.Route("/holds", func(r chi.Router) {
 				r.Use(middleware.Authenticate)

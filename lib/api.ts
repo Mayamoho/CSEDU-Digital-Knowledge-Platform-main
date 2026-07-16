@@ -394,6 +394,25 @@ class APIClient {
     });
   }
 
+  // Circulation desk (librarian barcode workflow)
+  async circulationCheckout(memberBarcode: string, itemBarcode: string): Promise<{
+    message: string; loan_id: string; member_name: string; title: string; due_date: string;
+  }> {
+    return this.request(`/library/circulation/checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ member_barcode: memberBarcode, item_barcode: itemBarcode }),
+    });
+  }
+
+  async circulationReturn(itemBarcode: string): Promise<{
+    message: string; loan_id: string; member_name: string; title: string;
+  }> {
+    return this.request(`/library/circulation/return`, {
+      method: 'POST',
+      body: JSON.stringify({ item_barcode: itemBarcode }),
+    });
+  }
+
   // Hold / reservation endpoints
   async placeHold(catalogId: string): Promise<{ message: string; hold_id: string; queue_position: number }> {
     return this.request(`/library/holds`, {
