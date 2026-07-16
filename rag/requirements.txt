@@ -12,3 +12,4 @@ httpx==0.26.0
 redis==5.0.1
 fastembed==0.4.2
 minio==7.2.7
+prometheus-client==0.20.0

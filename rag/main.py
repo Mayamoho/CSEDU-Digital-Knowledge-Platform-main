@@ -1,5 +1,9 @@
+import time
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
@@ -81,6 +85,20 @@ class HealthResponse(BaseModel):
 # Endpoints
 # ============================================================================
 
+# Prometheus metrics (SDD §6.5) — scraped at /metrics
+RAG_QUERIES = Counter(
+    "rag_queries_total", "RAG queries by detected language and model used",
+    ["language", "model"])
+RAG_LATENCY = Histogram(
+    "rag_query_duration_seconds", "End-to-end RAG query latency",
+    buckets=[0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30])
+
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
@@ -102,6 +120,7 @@ async def query_rag(request: QueryRequest):
     3. Hybrid retrieval (vector + FTS)
     4. LLM response generation with citations
     """
+    _t0 = time.monotonic()
     try:
         logger.info(f"Received query: '{request.query}' (role: {request.user_role})")
         
@@ -161,6 +180,9 @@ async def query_rag(request: QueryRequest):
             history=[t.model_dump() for t in request.history],
         )
         
+        RAG_QUERIES.labels(language=detected_lang, model=result["model_used"]).inc()
+        RAG_LATENCY.observe(time.monotonic() - _t0)
+
         return QueryResponse(
             response=result["response"],
             citations=result["citations"],

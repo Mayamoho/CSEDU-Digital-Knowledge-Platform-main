@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/csedu/platform/api/internal/admin"
@@ -96,6 +97,8 @@ func main() {
 	// SDD §6.5: transparent audit logging for every mutating request,
 	// login attempt, AI query, and access denial.
 	r.Use(middleware.Audit(pool))
+	// SDD §6.5: Prometheus request metrics (scraped at /metrics).
+	r.Use(middleware.Metrics)
 
 	// CORS configuration - allow frontend origins
 	allowedOrigins := []string{"http://localhost:3000", "http://localhost"}
@@ -112,6 +115,9 @@ func main() {
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
+
+	// Prometheus scrape endpoint (infra/prometheus targets api:8080/metrics)
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
