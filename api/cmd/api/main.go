@@ -93,6 +93,9 @@ func main() {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Timeout(60 * time.Second))
+	// SDD §6.5: transparent audit logging for every mutating request,
+	// login attempt, AI query, and access denial.
+	r.Use(middleware.Audit(pool))
 
 	// CORS configuration - allow frontend origins
 	allowedOrigins := []string{"http://localhost:3000", "http://localhost"}
