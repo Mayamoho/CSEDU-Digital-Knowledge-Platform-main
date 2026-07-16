@@ -20,6 +20,7 @@ class LLMClient:
         context_chunks: List[Dict[str, Any]],
         language: str = "en",
         model_tier: str = "simple",
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
         Generate AI response using retrieved context
@@ -34,7 +35,7 @@ class LLMClient:
             Dict with response text, citations, and metadata
         """
         # Build prompt with context
-        prompt = self._build_prompt(query, context_chunks, language)
+        prompt = self._build_prompt(query, context_chunks, language, history)
 
         # Select model based on tier
         model = self._select_model(model_tier)
@@ -78,7 +79,11 @@ class LLMClient:
         }
 
     def _build_prompt(
-        self, query: str, context_chunks: List[Dict[str, Any]], language: str
+        self,
+        query: str,
+        context_chunks: List[Dict[str, Any]],
+        language: str,
+        history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """Build the RAG prompt with context and instructions"""
         system_prompt = """You are the CSEDU Knowledge Assistant for the Department of Computer Science and Engineering at the University of Dhaka.
@@ -118,7 +123,20 @@ RULES:
             "auto": "Answer in the same language as the question.",
         }.get(language, "Answer in English.")
 
-        user_prompt = f"""Context Documents:
+        # FR-AI-008: include prior exchanges so follow-up questions
+        # ("what about the second one?") resolve against the conversation.
+        history_text = ""
+        if history:
+            turns = []
+            for turn in history[-10:]:
+                turns.append(f"User: {turn['query']}\nAssistant: {turn['response']}")
+            history_text = (
+                "Previous conversation (for context — do not repeat it):\n"
+                + "\n\n".join(turns)
+                + "\n\n"
+            )
+
+        user_prompt = f"""{history_text}Context Documents:
 {context_text}
 
 Question: {query}

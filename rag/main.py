@@ -38,12 +38,19 @@ app.add_middleware(
 # Request/Response Models
 # ============================================================================
 
+class HistoryTurn(BaseModel):
+    query: str
+    response: str
+
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=3, max_length=5000)
     user_role: str = Field(default="public")
     language: str = Field(default="auto", pattern="^(en|bn|auto)$")
     session_id: Optional[str] = None
     rewrite_query: bool = Field(default=False)
+    # FR-AI-008: up to 10 previous exchanges for multi-turn context
+    history: List[HistoryTurn] = Field(default_factory=list, max_length=10)
 
 
 class QueryResponse(BaseModel):
@@ -150,7 +157,8 @@ async def query_rag(request: QueryRequest):
             query=original_query,  # Use original query for response
             context_chunks=context_chunks,
             language=detected_lang,
-            model_tier=model_tier
+            model_tier=model_tier,
+            history=[t.model_dump() for t in request.history],
         )
         
         return QueryResponse(

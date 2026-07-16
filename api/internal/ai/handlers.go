@@ -3,6 +3,8 @@ package ai
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,11 +79,18 @@ type Citation struct {
 
 // RAG Service request/response types
 type ragQueryRequest struct {
-	Query        string `json:"query"`
-	UserRole     string `json:"user_role"`
-	Language     string `json:"language"`
-	SessionID    string `json:"session_id,omitempty"`
-	RewriteQuery bool   `json:"rewrite_query"`
+	Query        string        `json:"query"`
+	UserRole     string        `json:"user_role"`
+	Language     string        `json:"language"`
+	SessionID    string        `json:"session_id,omitempty"`
+	RewriteQuery bool          `json:"rewrite_query"`
+	History      []historyTurn `json:"history,omitempty"`
+}
+
+// historyTurn is one prior exchange in the session (FR-AI-008).
+type historyTurn struct {
+	Query    string `json:"query"`
+	Response string `json:"response"`
 }
 
 type ragQueryResponse struct {
@@ -129,12 +138,42 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	// Get user role for access control
 	roleTier, _ := authpkg.GetRoleTier(r)
 
-	// Call RAG service
-	ragResp, err := h.callRAGService(r.Context(), req.Query, roleTier, language, sessionID, req.RewriteQuery)
-	if err != nil {
-		log.Printf("RAG service call failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to process query")
-		return
+	// FR-AI-008: multi-turn context — up to the 10 most recent exchanges
+	// in this session are forwarded to the RAG service.
+	history := h.recentHistory(r.Context(), sessionID, userID, 10)
+
+	// SDD §3.2 / R-03: cache AI responses for 5 minutes so repeated
+	// identical queries skip the LLM call entirely. Only context-free
+	// (no-history) queries are cacheable — a follow-up depends on the
+	// conversation so far.
+	cacheKey := ""
+	var ragResp *ragQueryResponse
+	var err error
+	if len(history) == 0 {
+		sum := sha256.Sum256([]byte(req.Query + "|" + roleTier + "|" + language))
+		cacheKey = "ai_cache:" + hex.EncodeToString(sum[:])
+		if h.redis != nil {
+			if cached, cerr := h.redis.Get(r.Context(), cacheKey).Result(); cerr == nil {
+				var cr ragQueryResponse
+				if json.Unmarshal([]byte(cached), &cr) == nil {
+					ragResp = &cr
+				}
+			}
+		}
+	}
+
+	if ragResp == nil {
+		ragResp, err = h.callRAGService(r.Context(), req.Query, roleTier, language, sessionID, req.RewriteQuery, history)
+		if err != nil {
+			log.Printf("RAG service call failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to process query")
+			return
+		}
+		if cacheKey != "" && h.redis != nil {
+			if blob, merr := json.Marshal(ragResp); merr == nil {
+				h.redis.Set(r.Context(), cacheKey, blob, 5*time.Minute)
+			}
+		}
 	}
 
 	// Convert RAG citations to our Citation format with titles
@@ -239,7 +278,7 @@ func (h *Handler) Summarize(w http.ResponseWriter, r *http.Request) {
 	summaryQuery := fmt.Sprintf("Please provide a comprehensive summary of the document titled '%s'", title)
 
 	// Call RAG service with the item context
-	ragResp, err := h.callRAGService(r.Context(), summaryQuery, roleTier, language, "", false)
+	ragResp, err := h.callRAGService(r.Context(), summaryQuery, roleTier, language, "", false, nil)
 	if err != nil {
 		log.Printf("RAG service call failed for summarization: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to generate summary")
@@ -255,7 +294,7 @@ func (h *Handler) Summarize(w http.ResponseWriter, r *http.Request) {
 }
 
 // callRAGService makes HTTP request to RAG service /query endpoint
-func (h *Handler) callRAGService(ctx context.Context, query, userRole, language, sessionID string, rewriteQuery bool) (*ragQueryResponse, error) {
+func (h *Handler) callRAGService(ctx context.Context, query, userRole, language, sessionID string, rewriteQuery bool, history []historyTurn) (*ragQueryResponse, error) {
 	// Prepare request
 	ragReq := ragQueryRequest{
 		Query:        query,
@@ -263,6 +302,7 @@ func (h *Handler) callRAGService(ctx context.Context, query, userRole, language,
 		Language:     language,
 		SessionID:    sessionID,
 		RewriteQuery: rewriteQuery,
+		History:      history,
 	}
 
 	reqBody, err := json.Marshal(ragReq)
@@ -310,6 +350,33 @@ func (h *Handler) getItemTitle(ctx context.Context, itemID string) (string, erro
 		return "", err
 	}
 	return title, nil
+}
+
+// recentHistory returns up to `limit` prior exchanges for a session, oldest
+// first, for multi-turn context (FR-AI-008).
+func (h *Handler) recentHistory(ctx context.Context, sessionID, userID string, limit int) []historyTurn {
+	rows, err := h.db.Query(ctx,
+		`SELECT query, response FROM (
+		     SELECT query, response, created_at
+		     FROM ai_chat_messages
+		     WHERE session_id = $1 AND user_id = $2
+		     ORDER BY created_at DESC
+		     LIMIT $3
+		 ) recent ORDER BY created_at ASC`,
+		sessionID, userID, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var turns []historyTurn
+	for rows.Next() {
+		var t historyTurn
+		if err := rows.Scan(&t.Query, &t.Response); err == nil {
+			turns = append(turns, t)
+		}
+	}
+	return turns
 }
 
 // storeChatMessage stores chat interaction in database
