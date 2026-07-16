@@ -2,7 +2,9 @@ package loan
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -68,15 +70,21 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user already has active loans
-	var activeLoans int
+	// FR-TXX-018: block checkout while unpaid fines meet/exceed the threshold
+	var owed float64
 	_ = h.db.QueryRow(r.Context(),
-		`SELECT COUNT(*) FROM loans WHERE user_id = $1 AND return_date IS NULL`,
+		`SELECT COALESCE(SUM(amount), 0) FROM fines
+		 WHERE user_id = $1 AND status = 'pending'`,
 		userID,
-	).Scan(&activeLoans)
+	).Scan(&owed)
 
-	if activeLoans > 0 {
-		writeError(w, http.StatusBadRequest, "user already has active loans")
+	threshold := 50.0
+	if v, err := strconv.ParseFloat(os.Getenv("FINE_BLOCK_THRESHOLD_BDT"), 64); err == nil && v > 0 {
+		threshold = v
+	}
+	if owed >= threshold {
+		writeError(w, http.StatusForbidden,
+			fmt.Sprintf("member has outstanding fines of %.2f BDT — payment required before borrowing", owed))
 		return
 	}
 

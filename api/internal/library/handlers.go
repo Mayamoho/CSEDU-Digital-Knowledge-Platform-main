@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,6 +20,27 @@ import (
 type Handler struct{ db *pgxpool.Pool }
 
 func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
+
+// fineBlockThreshold reads FINE_BLOCK_THRESHOLD_BDT (default 50).
+func fineBlockThreshold() float64 {
+	if v, err := strconv.ParseFloat(os.Getenv("FINE_BLOCK_THRESHOLD_BDT"), 64); err == nil && v > 0 {
+		return v
+	}
+	return 50
+}
+
+// unpaidFinesBlock reports whether the user's pending fines meet/exceed the
+// checkout-block threshold (FR-TXX-018) and how much is owed.
+func unpaidFinesBlock(ctx context.Context, db *pgxpool.Pool, userID string) (bool, float64) {
+	var owed float64
+	if err := db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(amount), 0) FROM fines
+		 WHERE user_id = $1 AND status = 'pending'`, userID,
+	).Scan(&owed); err != nil {
+		return false, 0
+	}
+	return owed >= fineBlockThreshold(), owed
+}
 
 // backfillTopicsSQL classifies existing books into subjects from title
 // keywords. It mirrors, in the same specific-first order, migration
@@ -491,6 +513,13 @@ func (h *Handler) BorrowBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FR-TXX-018: block checkout while unpaid fines meet/exceed the threshold
+	if blocked, owed := unpaidFinesBlock(r.Context(), h.db, userID); blocked {
+		writeError(w, http.StatusForbidden,
+			fmt.Sprintf("you have outstanding fines of %.2f BDT — payment required before borrowing", owed))
+		return
+	}
+
 	// Check availability and borrow atomically
 	tx, err := h.db.Begin(r.Context())
 	if err != nil {
@@ -508,7 +537,11 @@ func (h *Handler) BorrowBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if available <= 0 {
-		writeError(w, http.StatusConflict, "no copies available")
+		// SDD Flow 3: offer a hold when the item is fully checked out.
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"message":  "no copies available — you can place a hold to be notified when one is returned",
+			"can_hold": true,
+		})
 		return
 	}
 
@@ -650,6 +683,9 @@ func (h *Handler) ReturnBook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "commit error")
 		return
 	}
+
+	// A copy is back on the shelf — fulfil the oldest active hold, if any.
+	_ = h.fulfillOldestHold(r, catalogID)
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "returned successfully"})
 }
