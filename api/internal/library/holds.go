@@ -2,12 +2,14 @@ package library
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/mailer"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -203,8 +205,9 @@ func (h *Handler) ListAllHolds(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"holds": holds})
 }
 
-// fulfillOldestHold marks the oldest active hold on an item as fulfilled.
-// Called when a copy is returned. Returns the fulfilled user's id ("" if none).
+// fulfillOldestHold marks the oldest active hold on an item as fulfilled and
+// emails the member (SDD §3.1.3 hold availability alerts). Called when a copy
+// is returned. Returns the fulfilled user's id ("" if none).
 func (h *Handler) fulfillOldestHold(r *http.Request, catalogID string) string {
 	var userID string
 	if err := h.db.QueryRow(r.Context(),
@@ -217,6 +220,20 @@ func (h *Handler) fulfillOldestHold(r *http.Request, catalogID string) string {
 		 RETURNING user_id`, catalogID,
 	).Scan(&userID); err != nil {
 		return ""
+	}
+
+	var email, name, title string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT u.email, u.name, c.title
+		 FROM users u, library_catalog c
+		 WHERE u.user_id = $1 AND c.catalog_id = $2`,
+		userID, catalogID,
+	).Scan(&email, &name, &title); err == nil {
+		mailer.SendAsync(email,
+			"Your held book is now available — "+title,
+			fmt.Sprintf("Hi %s,\n\nA copy of \"%s\" has been returned and is reserved for you.\n"+
+				"Please visit the library within 7 days to borrow it, after which the hold expires.\n\n"+
+				"— CSEDU Digital Knowledge Platform", name, title))
 	}
 	return userID
 }

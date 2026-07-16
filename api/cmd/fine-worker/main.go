@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/csedu/platform/api/internal/mailer"
 )
 
 func main() {
@@ -130,6 +132,24 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 				updated++
 			}
 			log.Printf("Fine for loan %s: %.2f BDT (%d days overdue)", loanID, fineAmount, daysOverdue)
+		}
+
+		// SDD §3.1.3: overdue reminder email (best-effort, once per day
+		// alongside the nightly recalculation).
+		var email, name, title string
+		if err := pool.QueryRow(ctx, `
+			SELECT u.email, u.name, c.title
+			FROM loans l
+			JOIN users u           ON u.user_id    = l.user_id
+			JOIN library_catalog c ON c.catalog_id = l.catalog_id
+			WHERE l.loan_id = $1
+		`, loanID).Scan(&email, &name, &title); err == nil {
+			mailer.SendAsync(email,
+				fmt.Sprintf("Overdue: \"%s\" — %d day(s) late", title, daysOverdue),
+				fmt.Sprintf("Hi %s,\n\nYour loan of \"%s\" was due on %s and is now %d day(s) overdue.\n"+
+					"Your current fine is %.2f BDT. Please return the book to stop the fine growing.\n\n"+
+					"— CSEDU Digital Knowledge Platform",
+					name, title, dueDate.Format("2006-01-02"), daysOverdue, fineAmount))
 		}
 	}
 
