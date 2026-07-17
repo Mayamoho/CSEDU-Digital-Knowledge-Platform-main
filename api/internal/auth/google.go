@@ -167,7 +167,9 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	frag.Set("access_token", tokens.AccessToken)
 	frag.Set("refresh_token", tokens.RefreshToken)
 	frag.Set("expires_in", fmt.Sprintf("%d", tokens.ExpiresIn))
-	http.Redirect(w, r, frontendURL()+"/auth/callback#"+frag.Encode(), http.StatusFound)
+	// Next route app/(auth)/callback resolves to URL "/callback" — the "(auth)"
+	// group is not part of the path.
+	http.Redirect(w, r, frontendURL()+"/callback#"+frag.Encode(), http.StatusFound)
 }
 
 // redirectAuthError sends the user back to the login page with an error code

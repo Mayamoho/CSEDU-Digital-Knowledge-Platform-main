@@ -143,6 +143,10 @@ func main() {
 			r.Get("/google/login", authHandler.GoogleLogin)
 			r.Get("/google/callback", authHandler.GoogleCallback)
 
+			// Passwordless magic-link email sign-in (reuses SMTP + Redis).
+			r.Post("/magic/request", authHandler.MagicRequest)
+			r.Get("/magic/verify", authHandler.MagicVerify)
+
 			// Protected auth routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)
