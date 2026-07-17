@@ -57,8 +57,12 @@ func Send(to, subject, body string) error {
 
 	addr := fmt.Sprintf("%s:%s", host, port)
 	if err := smtp.SendMail(addr, auth, envelopeFrom(from), []string{to}, []byte(msg)); err != nil {
+		log.Printf("mailer: FAILED to send %q to %s via %s: %v", subject, to, addr, err)
 		return fmt.Errorf("smtp send to %s: %w", to, err)
 	}
+	// Success is logged so operators can confirm delivery attempts without a
+	// debugger — the previous silent success made the mailer look broken.
+	log.Printf("mailer: sent %q to %s via %s", subject, to, addr)
 	return nil
 }
 
