@@ -23,6 +23,29 @@ export interface User {
   last_login: string | null;
 }
 
+export interface Notification {
+  notification_id: string;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  created_at: string;
+}
+
+export interface RoleRequest {
+  request_id: string;
+  requested_role: string;
+  justification: string;
+  status: 'pending' | 'approved' | 'rejected';
+  decision_notes: string;
+  created_at: string;
+  // Present only in the admin queue listing:
+  user_id?: string;
+  name?: string;
+  email?: string;
+  current_role?: string;
+}
+
 export interface AuthTokens {
   access_token: string;
   refresh_token: string;
@@ -536,6 +559,43 @@ class APIClient {
     return this.request(`/admin/media/${itemId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+  }
+
+  // In-app notifications
+  async listNotifications(): Promise<{ data: Notification[]; unread: number }> {
+    return this.request(`/notifications`);
+  }
+
+  async markNotificationRead(id: string): Promise<{ message: string }> {
+    return this.request(`/notifications/${id}/read`, { method: 'POST' });
+  }
+
+  async markAllNotificationsRead(): Promise<{ message: string }> {
+    return this.request(`/notifications/read-all`, { method: 'POST' });
+  }
+
+  // Role-upgrade requests (self-service)
+  async createRoleRequest(requestedRole: string, justification: string): Promise<{ request_id: string; status: string }> {
+    return this.request(`/role-requests`, {
+      method: 'POST',
+      body: JSON.stringify({ requested_role: requestedRole, justification }),
+    });
+  }
+
+  async listMyRoleRequests(): Promise<{ data: RoleRequest[] }> {
+    return this.request(`/role-requests/mine`);
+  }
+
+  // Admin: role-request queue
+  async adminListRoleRequests(status = 'pending'): Promise<{ data: RoleRequest[] }> {
+    return this.request(`/admin/role-requests?status=${encodeURIComponent(status)}`);
+  }
+
+  async adminDecideRoleRequest(id: string, approve: boolean, notes = ''): Promise<{ status: string }> {
+    return this.request(`/admin/role-requests/${id}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ approve, notes }),
     });
   }
 

@@ -28,10 +28,13 @@ import {
   Menu,
   X,
   Bot,
+  ArrowUpCircle,
+  Inbox,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 const mainNavItems = [
   { href: "/catalog", label: "Library Catalog", icon: Library },
@@ -128,6 +131,8 @@ export function Header() {
             <span className="sr-only">Search</span>
           </Button>
 
+          {isAuthenticated && user && <NotificationBell />}
+
           {isAuthenticated && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -170,12 +175,29 @@ export function Header() {
                     </Link>
                   </DropdownMenuItem>
                 )}
-                {/* Administrator-only: manage user roles */}
+                {/* Administrator-only: manage user roles + review requests */}
                 {user.role_tier === 'administrator' && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/users" className="cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        Manage Roles
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/role-requests" className="cursor-pointer">
+                        <Inbox className="mr-2 h-4 w-4" />
+                        Role Requests
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {/* Everyone below administrator can ask to be upgraded */}
+                {user.role_tier !== 'administrator' && (
                   <DropdownMenuItem asChild>
-                    <Link href="/admin/users" className="cursor-pointer">
-                      <User className="mr-2 h-4 w-4" />
-                      Manage Roles
+                    <Link href="/role-request" className="cursor-pointer">
+                      <ArrowUpCircle className="mr-2 h-4 w-4" />
+                      Request Role Upgrade
                     </Link>
                   </DropdownMenuItem>
                 )}

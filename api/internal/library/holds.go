@@ -10,6 +10,7 @@ import (
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/mailer"
+	"github.com/csedu/platform/api/internal/notify"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -229,11 +230,12 @@ func (h *Handler) fulfillOldestHold(r *http.Request, catalogID string) string {
 		 WHERE u.user_id = $1 AND c.catalog_id = $2`,
 		userID, catalogID,
 	).Scan(&email, &name, &title); err == nil {
-		mailer.SendAsync(email,
-			"Your held book is now available — "+title,
-			fmt.Sprintf("Hi %s,\n\nA copy of \"%s\" has been returned and is reserved for you.\n"+
-				"Please visit the library within 7 days to borrow it, after which the hold expires.\n\n"+
-				"— CSEDU Digital Knowledge Platform", name, title))
+		subject := "Your held book is now available — " + title
+		body := fmt.Sprintf("A copy of \"%s\" has been returned and is reserved for you. "+
+			"Please visit the library within 7 days to borrow it, after which the hold expires.", title)
+		notify.Push(r.Context(), h.db, userID, subject, body, "/dashboard")
+		mailer.SendAsync(email, subject,
+			fmt.Sprintf("Hi %s,\n\n%s\n\n— CSEDU Digital Knowledge Platform", name, body))
 	}
 	return userID
 }

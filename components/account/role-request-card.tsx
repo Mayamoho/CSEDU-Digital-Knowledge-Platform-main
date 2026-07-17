@@ -1,0 +1,171 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { apiClient, type RoleRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { ROLE_DISPLAY_NAMES } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// Roles a user may request for themselves (must match the API allow-list).
+const REQUESTABLE = ["researcher", "librarian"] as const;
+
+const statusVariant: Record<RoleRequest["status"], "secondary" | "default" | "outline"> = {
+  pending: "secondary",
+  approved: "default",
+  rejected: "outline",
+};
+
+export function RoleRequestCard() {
+  const { user } = useAuth();
+  const [requests, setRequests] = useState<RoleRequest[]>([]);
+  const [role, setRole] = useState<string>("researcher");
+  const [justification, setJustification] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.listMyRoleRequests();
+      setRequests(res?.data ?? []);
+    } catch {
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const hasPending = requests.some((r) => r.status === "pending");
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      await apiClient.createRoleRequest(role, justification.trim());
+      toast.success("Request submitted — an administrator will review it.");
+      setJustification("");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit request");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Request a role upgrade</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            You are currently a{" "}
+            <span className="font-medium text-foreground">
+              {user ? ROLE_DISPLAY_NAMES[user.role_tier] : "user"}
+            </span>
+            . New accounts start as Student. If you are a researcher or library
+            staff member, request the matching role below. An administrator will
+            review it and you will be notified of the outcome.
+          </p>
+
+          {hasPending ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              You already have a pending request. Please wait for an
+              administrator to review it.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Desired role</label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger className="w-full max-w-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REQUESTABLE.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_DISPLAY_NAMES[r as keyof typeof ROLE_DISPLAY_NAMES]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Justification <span className="text-muted-foreground">(optional but recommended)</span>
+                </label>
+                <Textarea
+                  value={justification}
+                  onChange={(e) => setJustification(e.target.value)}
+                  placeholder="e.g. I am a faculty researcher in the CSE department; my staff ID is ..."
+                  rows={4}
+                />
+              </div>
+
+              <Button onClick={submit} disabled={submitting}>
+                {submitting ? "Submitting..." : "Submit request"}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your requests</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Spinner className="h-6 w-6" />
+            </div>
+          ) : requests.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No requests yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {requests.map((r) => (
+                <li
+                  key={r.request_id}
+                  className="flex items-start justify-between gap-4 rounded-md border p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {ROLE_DISPLAY_NAMES[r.requested_role as keyof typeof ROLE_DISPLAY_NAMES] ??
+                        r.requested_role}
+                    </p>
+                    {r.justification && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{r.justification}</p>
+                    )}
+                    {r.decision_notes && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Admin note: {r.decision_notes}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant={statusVariant[r.status]}>{r.status}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

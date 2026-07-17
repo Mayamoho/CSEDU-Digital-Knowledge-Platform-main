@@ -23,8 +23,10 @@ import (
 	"github.com/csedu/platform/api/internal/loan"
 	"github.com/csedu/platform/api/internal/media"
 	"github.com/csedu/platform/api/internal/middleware"
+	"github.com/csedu/platform/api/internal/notify"
 	"github.com/csedu/platform/api/internal/projects"
 	"github.com/csedu/platform/api/internal/research"
+	"github.com/csedu/platform/api/internal/roles"
 	"github.com/csedu/platform/api/internal/storage"
 )
 
@@ -85,6 +87,8 @@ func main() {
 	adminHandler := admin.NewHandler(pool)
 	researchHandler := research.NewHandler(pool)
 	projectsHandler := projects.NewHandler(pool)
+	notifyHandler := notify.NewHandler(pool)
+	rolesHandler := roles.NewHandler(pool)
 
 	r := chi.NewRouter()
 
@@ -264,7 +268,26 @@ func main() {
 				r.Use(middleware.RequireRole("administrator"))
 				r.Patch("/users/{userId}/role", adminHandler.UpdateUserRole)
 				r.Get("/audit-log", adminHandler.ListAuditLog)
+
+				// Role-upgrade request queue
+				r.Get("/role-requests", rolesHandler.ListAll)
+				r.Post("/role-requests/{id}/decide", rolesHandler.Decide)
 			})
+		})
+
+		// ── Role-upgrade requests (any authenticated user) ─────────────────
+		r.Route("/role-requests", func(r chi.Router) {
+			r.Use(middleware.Authenticate)
+			r.Post("/", rolesHandler.Create)
+			r.Get("/mine", rolesHandler.ListMine)
+		})
+
+		// ── In-app notifications (any authenticated user) ──────────────────
+		r.Route("/notifications", func(r chi.Router) {
+			r.Use(middleware.Authenticate)
+			r.Get("/", notifyHandler.List)
+			r.Post("/{id}/read", notifyHandler.MarkRead)
+			r.Post("/read-all", notifyHandler.MarkAllRead)
 		})
 
 		// AI Chat (authenticated users)

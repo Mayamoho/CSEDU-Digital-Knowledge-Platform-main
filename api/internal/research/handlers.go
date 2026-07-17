@@ -17,6 +17,7 @@ import (
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/mailer"
+	"github.com/csedu/platform/api/internal/notify"
 )
 
 type Handler struct {
@@ -611,13 +612,13 @@ func (h *Handler) ReviewPaper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SDD Flow 5: notify the author of the review outcome (best-effort).
-	var authorEmail, authorName, paperTitle string
+	// SDD Flow 5: notify the author of the review outcome (in-app + best-effort email).
+	var authorID, authorEmail, authorName, paperTitle string
 	if err := h.db.QueryRow(ctx,
-		`SELECT u.email, u.name, m.title
+		`SELECT u.user_id, u.email, u.name, m.title
 		 FROM media_items m JOIN users u ON u.user_id = m.created_by
 		 WHERE m.item_id = $1`, itemID,
-	).Scan(&authorEmail, &authorName, &paperTitle); err == nil {
+	).Scan(&authorID, &authorEmail, &authorName, &paperTitle); err == nil {
 		outcome := "approved — you can now publish it from your dashboard"
 		if !req.Approved {
 			outcome = "sent back to draft with reviewer comments"
@@ -626,8 +627,11 @@ func (h *Handler) ReviewPaper(w http.ResponseWriter, r *http.Request) {
 		if notes == "" {
 			notes = "(no comments provided)"
 		}
-		mailer.SendAsync(authorEmail,
-			fmt.Sprintf("Review result for \"%s\"", paperTitle),
+		subject := fmt.Sprintf("Review result for \"%s\"", paperTitle)
+		notify.Push(ctx, h.db, authorID, subject,
+			fmt.Sprintf("Your research paper \"%s\" has been reviewed and %s.\n\nReviewer comments:\n%s",
+				paperTitle, outcome, notes), "/dashboard")
+		mailer.SendAsync(authorEmail, subject,
 			fmt.Sprintf("Hi %s,\n\nYour research paper \"%s\" has been reviewed and %s.\n\nReviewer comments:\n%s\n\n— CSEDU Digital Knowledge Platform",
 				authorName, paperTitle, outcome, notes))
 	}
