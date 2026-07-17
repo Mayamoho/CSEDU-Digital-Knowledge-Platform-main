@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { GoogleButton } from "@/components/auth/google-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Surface an SSO failure passed back by the Google callback (?sso_error=...).
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("sso_error");
+    if (reason) {
+      setError("Google sign-in failed (" + reason + "). Please try again or use email login.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,9 +140,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button variant="outline" className="w-full" disabled={isLoading}>
-              Continue with University SSO
-            </Button>
+            <GoogleButton />
 
             <p className="text-center text-sm text-muted-foreground">
               {"Don't have an account? "}

@@ -139,6 +139,10 @@ func main() {
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
 
+			// Google OAuth 2.0 SSO (SDD Flow 4). Full-page redirects, not XHR.
+			r.Get("/google/login", authHandler.GoogleLogin)
+			r.Get("/google/callback", authHandler.GoogleCallback)
+
 			// Protected auth routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)

@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { BookOpen, AlertCircle, Check, GraduationCap } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
+import { GoogleButton } from "@/components/auth/google-button";
 
 const passwordRequirements = [
   { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -211,6 +212,19 @@ export default function RegisterPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
+            <div className="relative w-full">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">
+                  Or sign up with
+                </span>
+              </div>
+            </div>
+
+            <GoogleButton label="Sign up with Google" />
+
             <p className="text-center text-xs text-muted-foreground">
               By creating an account, you agree to our{" "}
               <Link href="/terms" className="text-primary hover:underline">

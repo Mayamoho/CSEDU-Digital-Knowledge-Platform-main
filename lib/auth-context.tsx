@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (data: LoginRequest) => Promise<void>;
+  loginWithTokens: (tokens: AuthTokens) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
@@ -157,6 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadUser();
   }, [saveTokens, loadUser]);
 
+  // Used by the Google OAuth callback: tokens are already minted server-side
+  // and delivered via the URL fragment, so we just persist and load the user.
+  const loginWithTokens = useCallback(async (tokens: AuthTokens) => {
+    saveTokens(tokens);
+    await loadUser();
+  }, [saveTokens, loadUser]);
+
   const register = useCallback(async (data: RegisterRequest) => {
     const response = await apiClient.register(data);
     saveTokens(response.tokens);
@@ -180,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithTokens,
         register,
         logout,
         refreshAuth,
