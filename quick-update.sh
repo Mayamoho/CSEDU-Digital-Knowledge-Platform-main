@@ -32,13 +32,15 @@ echo ""
 echo "2. Cleaning Docker cache..."
 docker builder prune -f 2>/dev/null || true
 
-echo "   Rebuilding frontend, API and RAG service..."
-docker compose -f docker-compose.prod.yml build frontend api rag
+echo "   Rebuilding frontend, API, RAG and workers..."
+docker compose -f docker-compose.prod.yml build frontend api rag ingestion-worker fine-worker
 
-# Restart the stack (including RAG now)
+# Restart the stack. Workers are included so email-sending code and
+# updated SMTP credentials in .env are picked up (env_file is only
+# re-read when a container is (re)created, not on plain `restart`).
 echo ""
 echo "3. Restarting services..."
-docker compose -f docker-compose.prod.yml up -d nginx frontend api rag
+docker compose -f docker-compose.prod.yml up -d nginx frontend api rag ingestion-worker fine-worker
 
 # Show status
 echo ""

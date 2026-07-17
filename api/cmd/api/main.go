@@ -21,6 +21,7 @@ import (
 	"github.com/csedu/platform/api/internal/fine"
 	"github.com/csedu/platform/api/internal/library"
 	"github.com/csedu/platform/api/internal/loan"
+	"github.com/csedu/platform/api/internal/mailer"
 	"github.com/csedu/platform/api/internal/media"
 	"github.com/csedu/platform/api/internal/middleware"
 	"github.com/csedu/platform/api/internal/notify"
@@ -354,6 +355,12 @@ func main() {
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
+	}
+
+	if mailer.Enabled() {
+		log.Printf("mailer: ENABLED via SMTP host %q (from %q)", os.Getenv("SMTP_HOST"), os.Getenv("SMTP_FROM"))
+	} else {
+		log.Printf("mailer: DISABLED — SMTP_HOST unset; email notifications are no-ops")
 	}
 
 	log.Printf("API server listening on :%s", port)
