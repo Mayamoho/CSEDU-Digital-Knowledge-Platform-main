@@ -41,6 +41,7 @@ function ResearchGridInner() {
         // papers under review live in My Uploads / the dashboard review queue.
         const response = await apiClient.listResearch({
           status: "published",
+          q: query || undefined,
           rtype: rtype || undefined,
           year: year || undefined,
           topic: topic || undefined,

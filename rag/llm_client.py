@@ -1,4 +1,5 @@
-from typing import List, Dict, Any, Optional
+from typing import AsyncGenerator, List, Dict, Any, Optional
+import json
 import httpx
 import logging
 from config import settings
@@ -77,6 +78,71 @@ class LLMClient:
             "citations": self._extract_citations(context_chunks),
             "source_doc_ids": [str(chunk["item_id"]) for chunk in context_chunks],
         }
+
+    async def stream_response(
+        self,
+        query: str,
+        context_chunks: List[Dict[str, Any]],
+        language: str = "en",
+        model_tier: str = "simple",
+        history: Optional[List[Dict[str, str]]] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream the LLM answer as text deltas.
+
+        Tries Groq token streaming first. If Groq fails *before* any token is
+        emitted, falls back to the non-streaming path (Groq retry -> Gemini ->
+        keyword) and yields the whole answer at once. A mid-stream failure just
+        stops (the partial text already reached the client)."""
+        prompt = self._build_prompt(query, context_chunks, language, history)
+        model = self._select_model(model_tier)
+
+        yielded = False
+        if self.groq_api_key:
+            try:
+                async for delta in self._stream_groq(prompt, model):
+                    yielded = True
+                    yield delta
+                return
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Groq stream failed: {e}. Falling back.")
+                if yielded:
+                    return  # partial already sent — don't double up
+
+        result = await self.generate_response(
+            query, context_chunks, language, model_tier, history
+        )
+        yield result["response"]
+
+    async def _stream_groq(self, prompt: str, model: str) -> AsyncGenerator[str, None]:
+        """Yield content deltas from Groq's OpenAI-compatible SSE stream."""
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+            "max_tokens": 1024,
+            "stream": True,
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[len("data:"):].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        obj = json.loads(data)
+                        delta = obj["choices"][0]["delta"].get("content")
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if delta:
+                        yield delta
 
     def _build_prompt(
         self,

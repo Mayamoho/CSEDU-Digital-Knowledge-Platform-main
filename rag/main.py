@@ -1,8 +1,9 @@
+import json
 import time
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
@@ -195,6 +196,85 @@ async def query_rag(request: QueryRequest):
     except Exception as e:
         logger.error(f"Query processing error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
+
+
+@app.post("/query/stream")
+async def query_rag_stream(request: QueryRequest):
+    """Server-Sent Events variant of /query.
+
+    Emits: `meta` (citations + source ids + language + model) once, then a run
+    of `token` events (answer text deltas), then a terminal `done` event."""
+    detected_lang = request.language
+    query_rewritten = False
+    original_query = request.query
+
+    if request.language == "auto":
+        try:
+            detected_lang = detect(request.query)
+            if detected_lang not in ["en", "bn"]:
+                detected_lang = "en"
+        except LangDetectException:
+            detected_lang = "en"
+
+    query_to_use = request.query
+    if request.rewrite_query:
+        query_to_use = await llm_client.rewrite_query(request.query, detected_lang)
+        query_rewritten = query_to_use != request.query
+
+    context_chunks = retriever.retrieve(
+        query=query_to_use, user_role=request.user_role, language=detected_lang
+    )
+
+    def sse(event: str, data: dict) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    async def gen():
+        if not context_chunks:
+            no_results = {
+                "en": "I couldn't find relevant information in the platform's documents. Please try rephrasing your question or contact the library staff for assistance.",
+                "bn": "আমি প্ল্যাটফর্মের নথিতে প্রাসঙ্গিক তথ্য খুঁজে পাইনি। অনুগ্রহ করে আপনার প্রশ্নটি পুনরায় লিখুন বা সহায়তার জন্য লাইব্রেরি কর্মীদের সাথে যোগাযোগ করুন।",
+            }
+            yield sse("meta", {
+                "citations": [],
+                "source_doc_ids": [],
+                "detected_language": detected_lang,
+                "model_used": "none",
+                "query_rewritten": query_rewritten,
+            })
+            yield sse("token", {"text": no_results.get(detected_lang, no_results["en"])})
+            yield sse("done", {})
+            return
+
+        model_tier = _determine_model_tier(request.query, context_chunks)
+        citations = llm_client._extract_citations(context_chunks)
+        source_doc_ids = [str(c["item_id"]) for c in context_chunks]
+        yield sse("meta", {
+            "citations": citations,
+            "source_doc_ids": source_doc_ids,
+            "detected_language": detected_lang,
+            "model_used": f"groq/{llm_client._select_model(model_tier)}",
+            "query_rewritten": query_rewritten,
+        })
+        try:
+            async for delta in llm_client.stream_response(
+                query=original_query,
+                context_chunks=context_chunks,
+                language=detected_lang,
+                model_tier=model_tier,
+                history=[t.model_dump() for t in request.history],
+            ):
+                yield sse("token", {"text": delta})
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Streaming generation error: {e}", exc_info=True)
+            yield sse("token", {"text": " [stream interrupted]"})
+        RAG_QUERIES.labels(language=detected_lang, model="stream").inc()
+        yield sse("done", {})
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/embed", response_model=EmbedResponse)

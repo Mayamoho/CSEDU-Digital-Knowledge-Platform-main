@@ -27,6 +27,34 @@ const statusConfig = {
   reserved:  { label: "Reserved",  variant: "outline" as const },
 };
 
+// Book cover: prefer a stored cover_image, else fall back to the Open Library
+// cover API by ISBN (?default=false → 404s when missing so onError hides it and
+// the icon block below shows instead).
+function BookCover({ item }: { item: LibraryCatalogItem }) {
+  const [failed, setFailed] = useState(false);
+  const src =
+    item.cover_image ||
+    (item.isbn
+      ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(item.isbn)}-M.jpg?default=false`
+      : "");
+  if (!src || failed) return null;
+  return (
+    <Link
+      href={`/catalog/${item.item_id}`}
+      className="-mt-6 -mx-6 mb-3 block overflow-hidden rounded-t-xl bg-muted"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={item.title}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-44 w-full object-cover"
+      />
+    </Link>
+  );
+}
+
 export function CatalogGrid() {
   const searchParams = useSearchParams();
   const [items, setItems]         = useState<LibraryCatalogItem[]>([]);
@@ -151,8 +179,9 @@ export function CatalogGrid() {
         {sorted.map((item) => {
           const sc = statusConfig[item.status as keyof typeof statusConfig] ?? statusConfig.available;
           return (
-            <Card key={item.item_id} className="group flex flex-col transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 hover:border-primary/30">
+            <Card key={item.item_id} className="group flex flex-col overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 hover:border-primary/30">
               <CardHeader className="flex-1">
+                <BookCover item={item} />
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
                     <BookOpen className="h-5 w-5 text-primary" />

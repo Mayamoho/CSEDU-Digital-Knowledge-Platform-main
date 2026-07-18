@@ -19,7 +19,7 @@ import {
   LayoutDashboard,
   Loader2,
 } from "lucide-react";
-import { apiClient, type LibraryCatalogItem, type MediaItem } from "@/lib/api";
+import { apiClient, type LibraryCatalogItem, type MediaItem, type ResearchPaper, type StudentProject } from "@/lib/api";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -42,6 +42,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState<LibraryCatalogItem[]>([]);
   const [archives, setArchives] = useState<MediaItem[]>([]);
+  const [papers, setPapers] = useState<ResearchPaper[]>([]);
+  const [projects, setProjects] = useState<StudentProject[]>([]);
   const reqId = useRef(0);
 
   // Reset transient state whenever the palette closes.
@@ -50,6 +52,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       setQuery("");
       setBooks([]);
       setArchives([]);
+      setPapers([]);
+      setProjects([]);
       setLoading(false);
     }
   }, [open]);
@@ -60,6 +64,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (q.length < 2) {
       setBooks([]);
       setArchives([]);
+      setPapers([]);
+      setProjects([]);
       setLoading(false);
       return;
     }
@@ -67,13 +73,17 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     const id = ++reqId.current;
     const t = setTimeout(async () => {
       try {
-        const [cat, arc] = await Promise.all([
+        const [cat, arc, res, prj] = await Promise.all([
           apiClient.getLibraryCatalog({ q, page: 1, per_page: 5 }).catch(() => null),
           apiClient.getMediaItems({ q, page: 1, per_page: 5, item_type: "archive" }).catch(() => null),
+          apiClient.listResearch({ q, status: "published", page: 1, per_page: 5 }).catch(() => null),
+          apiClient.listProjects({ q, page: 1, per_page: 5 }).catch(() => null),
         ]);
         if (id !== reqId.current) return; // superseded
         setBooks(cat?.data ?? []);
         setArchives(arc?.data ?? []);
+        setPapers(res?.data ?? []);
+        setProjects(prj?.data ?? []);
       } finally {
         if (id === reqId.current) setLoading(false);
       }
@@ -106,7 +116,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               </div>
             )}
 
-            {!loading && query.trim().length >= 2 && books.length === 0 && archives.length === 0 && (
+            {!loading && query.trim().length >= 2 &&
+              books.length === 0 && archives.length === 0 &&
+              papers.length === 0 && projects.length === 0 && (
               <CommandEmpty>No results for &ldquo;{query.trim()}&rdquo;.</CommandEmpty>
             )}
 
@@ -147,6 +159,36 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   >
                     <FolderOpen className="mr-2 h-4 w-4 text-muted-foreground" />
                     <span className="line-clamp-1">{a.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {papers.length > 0 && (
+              <CommandGroup heading="Research">
+                {papers.map((p) => (
+                  <CommandItem
+                    key={p.paper_id}
+                    value={`research ${p.paper_id}`}
+                    onSelect={() => go(`/research/${p.paper_id}`)}
+                  >
+                    <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="line-clamp-1">{p.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {projects.length > 0 && (
+              <CommandGroup heading="Projects">
+                {projects.map((p) => (
+                  <CommandItem
+                    key={p.project_id}
+                    value={`project ${p.project_id}`}
+                    onSelect={() => go(`/projects/${p.project_id}`)}
+                  >
+                    <BookOpen className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="line-clamp-1">{p.title}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -265,6 +265,12 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		args = append(args, tech)
 		conds = append(conds, "mm.keywords @> ARRAY[$"+strconv.Itoa(len(args))+"]::text[]")
 	}
+	// Free-text search across title + abstract (powers the ⌘K palette and the
+	// projects page search box).
+	if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
+		args = append(args, "%"+q+"%")
+		conds = append(conds, "(m.title ILIKE $"+strconv.Itoa(len(args))+" OR COALESCE(mm.abstract, '') ILIKE $"+strconv.Itoa(len(args))+")")
+	}
 	whereClause := "1=1"
 	if len(conds) > 0 {
 		whereClause = strings.Join(conds, " AND ")

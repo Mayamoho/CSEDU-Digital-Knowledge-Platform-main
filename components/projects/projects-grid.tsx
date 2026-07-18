@@ -44,6 +44,7 @@ function ProjectsGridInner() {
       setIsLoading(true);
       try {
         const response = await apiClient.listProjects({
+          q: query || undefined,
           year: year || undefined,
           tech: tech || undefined,
           page,

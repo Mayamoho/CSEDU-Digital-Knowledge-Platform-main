@@ -743,6 +743,33 @@ class APIClient {
     });
   }
 
+  // Opens the SSE chat stream. Returns the raw Response so the caller can read
+  // response.body as a token stream. Throws if the stream can't be opened (the
+  // widget then falls back to the non-streaming sendChatMessage).
+  async streamChat(
+    query: string,
+    sessionId?: string,
+    language?: string,
+    rewriteQuery?: boolean
+  ): Promise<Response> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
+    const resp = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        query,
+        session_id: sessionId,
+        language: language || 'auto',
+        rewrite_query: rewriteQuery || false,
+      }),
+    });
+    if (!resp.ok || !resp.body) {
+      throw new Error(`stream failed: ${resp.status}`);
+    }
+    return resp;
+  }
+
   async getChatHistory(sessionId: string): Promise<ChatHistoryResponse> {
     return this.request<ChatHistoryResponse>(`/ai/chat/history/${sessionId}`);
   }
@@ -801,6 +828,7 @@ class APIClient {
     rtype?: string;
     year?: string;
     topic?: string;
+    q?: string;
     page?: number;
     per_page?: number;
   }): Promise<{ data: ResearchPaper[]; total: number; page?: number; per_page?: number; total_pages?: number; facets?: Facets }> {
@@ -810,6 +838,7 @@ class APIClient {
     if (params?.rtype) searchParams.append('rtype', params.rtype);
     if (params?.year) searchParams.append('year', params.year);
     if (params?.topic) searchParams.append('topic', params.topic);
+    if (params?.q) searchParams.append('q', params.q);
     if (params?.page) searchParams.append('page', String(params.page));
     if (params?.per_page) searchParams.append('per_page', String(params.per_page));
     return this.request(`/research?${searchParams.toString()}`);
@@ -880,6 +909,7 @@ class APIClient {
     status?: string;
     year?: string;
     tech?: string;
+    q?: string;
     page?: number;
     per_page?: number;
   }): Promise<{ data: StudentProject[]; total: number; page?: number; per_page?: number; total_pages?: number; facets?: Facets }> {
@@ -887,6 +917,7 @@ class APIClient {
     if (params?.status) sp.append('status', params.status);
     if (params?.year) sp.append('year', params.year);
     if (params?.tech) sp.append('tech', params.tech);
+    if (params?.q) sp.append('q', params.q);
     if (params?.page) sp.append('page', String(params.page));
     if (params?.per_page) sp.append('per_page', String(params.per_page));
     return this.request(`/projects?${sp.toString()}`);

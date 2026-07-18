@@ -88,47 +88,114 @@ export function FloatingChatWidget() {
     setInput("");
     setIsLoading(true);
 
-    try {
-      const response = await apiClient.sendChatMessage(queryText, sessionId || undefined);
-      
-      // Update session ID if this is the first message
-      if (!sessionId) {
-        setSessionId(response.session_id);
-      }
+    const assistantId = (Date.now() + 1).toString();
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: response.response,
-        role: "assistant",
-        timestamp: new Date(),
-        citations: response.sources ? response.sources.map(source => source.title) : [],
-        citationIds: response.sources ? response.sources.map(source => source.item_id) : [],
+    try {
+      // Streaming path: the answer types in live via SSE.
+      const resp = await apiClient.streamChat(queryText, sessionId || undefined);
+
+      // Placeholder assistant message we progressively fill.
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, content: "", role: "assistant", timestamp: new Date() },
+      ]);
+
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let gotToken = false;
+
+      const applyToken = (text: string) => {
+        gotToken = true;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + text } : m)),
+        );
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Failed to send chat message:", error);
-
-      let errorMessage = "Sorry, I encountered an error while processing your request. Please try again.";
-      if (error instanceof Error) {
-        if (error.message.includes('Failed to fetch')) {
-          errorMessage = "Unable to connect to the AI service. Please check your connection and try again.";
-        } else if (error.message.includes('401') || error.message.includes('unauthorized')) {
-          errorMessage = "You need to be logged in to use the AI chat feature.";
-        } else if (error.message.includes('403') || error.message.includes('forbidden')) {
-          errorMessage = "You don't have permission to use the AI chat feature.";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE frames are separated by a blank line.
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          let event = "message";
+          let data = "";
+          for (const rawLine of frame.split("\n")) {
+            const line = rawLine.trimEnd();
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (!data) continue;
+          try {
+            if (event === "session") {
+              const o = JSON.parse(data);
+              if (!sessionId && o.session_id) setSessionId(o.session_id);
+            } else if (event === "meta") {
+              const o = JSON.parse(data);
+              const cits: Array<{ item_id: string; title: string }> = Array.isArray(o.citations)
+                ? o.citations
+                : [];
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        citations: cits.map((c) => c.title),
+                        citationIds: cits.map((c) => c.item_id),
+                      }
+                    : m,
+                ),
+              );
+            } else if (event === "token") {
+              const o = JSON.parse(data);
+              if (o.text) applyToken(o.text);
+            }
+          } catch {
+            // ignore malformed frame
+          }
         }
       }
-      
-      const errorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: errorMessage,
-        role: "assistant",
-        timestamp: new Date(),
-      };
 
-      setMessages((prev) => [...prev, errorResponse]);
-      toast.error(errorMessage);
+      if (!gotToken) throw new Error("empty stream");
+    } catch (streamErr) {
+      // Drop the empty placeholder, then fall back to the non-streaming call.
+      setMessages((prev) => prev.filter((m) => !(m.id === assistantId && m.content === "")));
+      console.warn("Chat stream failed, falling back to non-streaming:", streamErr);
+      try {
+        const response = await apiClient.sendChatMessage(queryText, sessionId || undefined);
+        if (!sessionId) setSessionId(response.session_id);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantId,
+            content: response.response,
+            role: "assistant",
+            timestamp: new Date(),
+            citations: response.sources ? response.sources.map((s) => s.title) : [],
+            citationIds: response.sources ? response.sources.map((s) => s.item_id) : [],
+          },
+        ]);
+      } catch (error) {
+        console.error("Failed to send chat message:", error);
+        let errorMessage = "Sorry, I encountered an error while processing your request. Please try again.";
+        if (error instanceof Error) {
+          if (error.message.includes("Failed to fetch")) {
+            errorMessage = "Unable to connect to the AI service. Please check your connection and try again.";
+          } else if (error.message.includes("401") || error.message.includes("unauthorized")) {
+            errorMessage = "You need to be logged in to use the AI chat feature.";
+          } else if (error.message.includes("403") || error.message.includes("forbidden")) {
+            errorMessage = "You don't have permission to use the AI chat feature.";
+          }
+        }
+        setMessages((prev) => [
+          ...prev,
+          { id: (Date.now() + 2).toString(), content: errorMessage, role: "assistant", timestamp: new Date() },
+        ]);
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }

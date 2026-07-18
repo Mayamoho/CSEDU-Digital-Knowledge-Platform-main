@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -207,6 +209,137 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		DetectedLanguage: ragResp.DetectedLanguage,
 		QueryRewritten:   ragResp.QueryRewritten,
 	})
+}
+
+// POST /api/v1/ai/chat/stream
+// Server-Sent Events proxy: forwards the RAG service's token stream straight to
+// the browser (so the answer types out live), while accumulating the full text
+// to persist once the stream completes. Falls back to nothing special — if the
+// RAG stream can't be opened, returns an error and the client retries the
+// non-streaming /ai/chat endpoint.
+func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Query == "" {
+		writeError(w, http.StatusBadRequest, "query is required")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+
+	sessionID := req.SessionID
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+	}
+	language := req.Language
+	if language == "" {
+		language = "auto"
+	}
+	roleTier, _ := authpkg.GetRoleTier(r)
+	history := h.recentHistory(r.Context(), sessionID, userID, 10)
+
+	// Open the RAG stream.
+	ragReq := ragQueryRequest{
+		Query:        req.Query,
+		UserRole:     roleTier,
+		Language:     language,
+		SessionID:    sessionID,
+		RewriteQuery: req.RewriteQuery,
+		History:      history,
+	}
+	body, _ := json.Marshal(ragReq)
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), "POST", h.ragURL+"/query/stream", bytes.NewReader(body))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build stream request")
+		return
+	}
+	upstreamReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.httpClient.Do(upstreamReq)
+	if err != nil {
+		log.Printf("RAG stream call failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to open stream")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		log.Printf("RAG stream returned %d: %s", resp.StatusCode, string(b))
+		writeError(w, http.StatusInternalServerError, "stream unavailable")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // stop nginx from buffering the stream
+	w.WriteHeader(http.StatusOK)
+
+	// Tell the client its session id up front.
+	fmt.Fprintf(w, "event: session\ndata: {\"session_id\":%q}\n\n", sessionID)
+	flusher.Flush()
+
+	// Forward every SSE line verbatim while parsing tokens/meta for persistence.
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var curEvent string
+	var full strings.Builder
+	var sourceIDs []string
+	var modelUsed string
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Fprintf(w, "%s\n", line)
+		if line == "" {
+			curEvent = ""
+			flusher.Flush()
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "event:"):
+			curEvent = strings.TrimSpace(line[len("event:"):])
+		case strings.HasPrefix(line, "data:"):
+			data := strings.TrimSpace(line[len("data:"):])
+			switch curEvent {
+			case "meta":
+				var m struct {
+					SourceDocIDs []string `json:"source_doc_ids"`
+					ModelUsed    string   `json:"model_used"`
+				}
+				if json.Unmarshal([]byte(data), &m) == nil {
+					sourceIDs = m.SourceDocIDs
+					modelUsed = m.ModelUsed
+				}
+			case "token":
+				var tk struct {
+					Text string `json:"text"`
+				}
+				if json.Unmarshal([]byte(data), &tk) == nil {
+					full.WriteString(tk.Text)
+				}
+			}
+		}
+		flusher.Flush()
+	}
+
+	// Persist the assembled exchange (best-effort — never fail the request).
+	if answer := full.String(); answer != "" {
+		if err := h.storeChatMessage(r.Context(), sessionID, userID, req.Query, answer, sourceIDs, modelUsed); err != nil {
+			log.Printf("Failed to store streamed chat message: %v", err)
+		}
+	}
 }
 
 // GET /api/v1/ai/chat/history/{sessionId}

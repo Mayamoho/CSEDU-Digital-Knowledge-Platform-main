@@ -304,6 +304,7 @@ func main() {
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)
 				r.Post("/chat", aiHandler.Chat)
+				r.Post("/chat/stream", aiHandler.ChatStream)
 				r.Get("/chat/history/{sessionId}", aiHandler.GetChatHistory)
 				r.Post("/summarize", aiHandler.Summarize)
 			})
