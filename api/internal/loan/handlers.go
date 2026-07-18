@@ -117,7 +117,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	var loanID string
-	dueDate := time.Now().AddDate(0, 0, 7) // 7 days loan period
+	dueDate := time.Now().Add(20 * time.Hour) // 20 hour loan period
 
 	if err := tx.QueryRow(r.Context(),
 		`INSERT INTO loans (user_id, catalog_id, checkout_date, due_date, status)

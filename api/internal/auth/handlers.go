@@ -173,7 +173,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	// (researcher/librarian/administrator) grant access to confidential/
 	// restricted content and may only be assigned by an administrator via
 	// PATCH /api/v1/admin/users/{userId}/role. req.Role is deliberately ignored.
-	role := "student"
+	role := "public"
 
 	// Bcrypt cost 12 as per SDD
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)

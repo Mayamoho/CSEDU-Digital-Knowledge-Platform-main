@@ -51,8 +51,11 @@ class HybridRetriever:
     # chunks, never the whole set, so the model confidently counts whatever it was handed.
     # These queries get an exact, complete inventory instead.
     _INVENTORY_INTENT = [
-        "how many", "how much", "number of", "count", "total", "list all", "list the",
-        "all the", "show all", "every", "inventory", "কয়টি", "কতটি", "কতগুলো", "তালিকা", "সব",
+        "how many", "how much", "number of", "count", "total", "list", "list all",
+        "list the", "all the", "show all", "show me", "every", "inventory",
+        "what are", "which", "do you have", "any ", "available", "what books",
+        "what research", "what papers", "what projects",
+        "কয়টি", "কতটি", "কতগুলো", "তালিকা", "সব",
     ]
     _TYPE_KEYWORDS = {
         "book": ["book", "catalog", "catalogue", "library", "textbook", "বই", "লাইব্রেরি"],
@@ -60,7 +63,7 @@ class HybridRetriever:
         "project": ["project", "projects", "প্রকল্প"],
         "research": ["research", "paper", "papers", "publication", "গবেষণা"],
     }
-    _INVENTORY_TITLE_LIMIT = 60
+    _INVENTORY_TITLE_LIMIT = 500
 
     def _corpus_inventory(self, query: str, access_tiers: List[str]) -> List[Dict]:
         q = query.lower()

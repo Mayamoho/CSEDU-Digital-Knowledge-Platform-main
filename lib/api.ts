@@ -653,7 +653,7 @@ class APIClient {
   }
 
   // Librarian: books this librarian has added to the catalog
-  async getMyAddedBooks(params: { page?: number; per_page?: number } = {}): Promise<{ data: AddedBook[]; total: number }> {
+  async getMyAddedBooks(params: { page?: number; per_page?: number } = {}): Promise<{ data: AddedBook[]; total: number; by_topic: { topic: string; count: number }[] }> {
     const sp = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined) sp.append(k, String(v)); });
     return this.request(`/library/catalog/my-books?${sp.toString()}`);

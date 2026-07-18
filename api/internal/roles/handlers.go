@@ -34,7 +34,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // Roles a user may request for themselves. Administrator is deliberately
 // excluded — it can only be granted directly by an existing administrator.
-var requestableRoles = map[string]bool{"researcher": true, "librarian": true}
+var requestableRoles = map[string]bool{"student": true, "researcher": true, "librarian": true}
 
 // POST /api/v1/role-requests  {requested_role, justification}
 // Any authenticated user files a request; all administrators are notified.
@@ -54,7 +54,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !requestableRoles[req.RequestedRole] {
-		writeError(w, http.StatusBadRequest, "requested_role must be researcher or librarian")
+		writeError(w, http.StatusBadRequest, "requested_role must be student, researcher or librarian")
 		return
 	}
 

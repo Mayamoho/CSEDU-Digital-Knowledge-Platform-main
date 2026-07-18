@@ -88,7 +88,9 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 		// Calculate days overdue
 		daysOverdue := int(time.Since(dueDate).Hours() / 24)
 		if daysOverdue < 1 {
-			continue // Not yet a full day overdue
+			// Loan period is now measured in hours (20h), so any overdue —
+			// even under a full day — incurs one charging period.
+			daysOverdue = 1
 		}
 
 		// Calculate fine amount

@@ -191,7 +191,7 @@ func (h *Handler) findOrCreateSSOUser(ctx context.Context, email, name string) (
 	}
 
 	// Not found → create an SSO-only account (password_hash left NULL).
-	roleTier = "student"
+	roleTier = "public"
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO users (email, name, role_tier, last_login)
 		 VALUES ($1, $2, $3, now())

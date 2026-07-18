@@ -548,7 +548,7 @@ func (h *Handler) BorrowBook(w http.ResponseWriter, r *http.Request) {
 	var loanID, dueDate string
 	if err := tx.QueryRow(r.Context(),
 		`INSERT INTO loans (user_id, catalog_id, due_date)
-		 VALUES ($1, $2, now() + interval '7 days')
+		 VALUES ($1, $2, now() + interval '20 hours')
 		 RETURNING loan_id, to_char(due_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
 		userID, req.CatalogID,
 	).Scan(&loanID, &dueDate); err != nil {
@@ -1122,10 +1122,30 @@ func (h *Handler) GetMyAddedBooks(w http.ResponseWriter, r *http.Request) {
 		books = append(books, b)
 	}
 
+	// Per-topic breakdown across ALL of this librarian's added books (every
+	// page), so the profile can show how many books they added per subject.
+	type topicCount struct {
+		Topic string `json:"topic"`
+		Count int    `json:"count"`
+	}
+	byTopic := []topicCount{}
+	if trows, terr := h.db.Query(r.Context(),
+		`SELECT topic, COUNT(*) AS c FROM library_catalog
+		 WHERE created_by = $1 GROUP BY topic ORDER BY c DESC, topic`, userID); terr == nil {
+		defer trows.Close()
+		for trows.Next() {
+			var tc topicCount
+			if trows.Scan(&tc.Topic, &tc.Count) == nil {
+				byTopic = append(byTopic, tc)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data":  books,
-		"total": total,
-		"page":  page,
+		"data":     books,
+		"total":    total,
+		"page":     page,
 		"per_page": perPage,
+		"by_topic": byTopic,
 	})
 }

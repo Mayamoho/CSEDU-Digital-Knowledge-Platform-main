@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 
 // Roles a user may request for themselves (must match the API allow-list).
-const REQUESTABLE = ["researcher", "librarian"] as const;
+const REQUESTABLE = ["student", "researcher", "librarian"] as const;
 
 const statusVariant: Record<RoleRequest["status"], "secondary" | "default" | "outline"> = {
   pending: "secondary",
@@ -30,7 +30,7 @@ const statusVariant: Record<RoleRequest["status"], "secondary" | "default" | "ou
 export function RoleRequestCard() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<RoleRequest[]>([]);
-  const [role, setRole] = useState<string>("researcher");
+  const [role, setRole] = useState<string>("student");
   const [justification, setJustification] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -79,7 +79,7 @@ export function RoleRequestCard() {
             <span className="font-medium text-foreground">
               {user ? ROLE_DISPLAY_NAMES[user.role_tier] : "user"}
             </span>
-            . New accounts start as Student. If you are a researcher or library
+            . New accounts start as Public. If you are a student, researcher or library
             staff member, request the matching role below. An administrator will
             review it and you will be notified of the outcome.
           </p>

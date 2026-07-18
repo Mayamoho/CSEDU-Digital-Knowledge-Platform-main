@@ -15,6 +15,8 @@ export function ProfileContent() {
   const [uploads, setUploads] = useState<MediaItem[]>([]);
   const [loans, setLoans] = useState<LoanItem[]>([]);
   const [addedBooks, setAddedBooks] = useState<any[]>([]);
+  const [addedTotal, setAddedTotal] = useState(0);
+  const [byTopic, setByTopic] = useState<{ topic: string; count: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +30,8 @@ export function ProfileContent() {
           ]);
           setLoans(loansRes.data);
           setAddedBooks(booksRes.data);
+          setAddedTotal(booksRes.total);
+          setByTopic(booksRes.by_topic ?? []);
         } else {
           const [uploadsRes, loansRes] = await Promise.all([
             apiClient.getMyUploads({ per_page: 100 }),
@@ -55,7 +59,7 @@ export function ProfileContent() {
     archives: uploads.filter(u => u.item_type === 'archive').length,
     totalLoans: loans.length,
     activeLoans: loans.filter(l => l.status === 'active').length,
-    addedBooks: addedBooks.length,
+    addedBooks: addedTotal || addedBooks.length,
   };
 
   const isLibrarian = user?.role_tier === 'librarian';
@@ -134,6 +138,22 @@ export function ProfileContent() {
                   <p className="text-sm text-muted-foreground">Books Added</p>
                 </div>
               </div>
+              {byTopic.length > 0 && (
+                <div className="mt-4 border-t pt-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">By topic</p>
+                  <div className="flex flex-wrap gap-2">
+                    {byTopic.map((t) => (
+                      <span
+                        key={t.topic}
+                        className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs"
+                      >
+                        {t.topic}
+                        <span className="font-semibold">{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

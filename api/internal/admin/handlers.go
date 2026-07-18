@@ -242,6 +242,10 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	// Stamp the importing librarian as creator so bulk-added books show up in
+	// their profile "Books Added" count (previously left NULL, so they showed 0).
+	actorID, _ := authpkg.GetUserID(r)
+
 	cr := csv.NewReader(file)
 	cr.TrimLeadingSpace = true
 
@@ -320,8 +324,8 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 			var wasInserted bool
 			err := h.db.QueryRow(r.Context(),
 				`INSERT INTO library_catalog
-				   (title, author, isbn, topic, format, location, year, total_copies, available_copies)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+				   (title, author, isbn, topic, format, location, year, total_copies, available_copies, created_by)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)
 				 ON CONFLICT (isbn) WHERE isbn IS NOT NULL DO UPDATE SET
 				   title            = EXCLUDED.title,
 				   author           = EXCLUDED.author,
@@ -329,9 +333,10 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 				   format           = EXCLUDED.format,
 				   location         = EXCLUDED.location,
 				   year             = EXCLUDED.year,
-				   total_copies     = EXCLUDED.total_copies
+				   total_copies     = EXCLUDED.total_copies,
+				   created_by       = COALESCE(library_catalog.created_by, EXCLUDED.created_by)
 				 RETURNING (xmax = 0)`,
-				title, author, isbn, topic, format, location, yearVal, totalCopies).Scan(&wasInserted)
+				title, author, isbn, topic, format, location, yearVal, totalCopies, actorID).Scan(&wasInserted)
 			if err != nil {
 				skipped++
 				continue
@@ -345,9 +350,9 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 			// No ISBN — always insert
 			_, err := h.db.Exec(r.Context(),
 				`INSERT INTO library_catalog
-				   (title, author, topic, format, location, year, total_copies, available_copies)
-				 VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
-				title, author, topic, format, location, yearVal, totalCopies)
+				   (title, author, topic, format, location, year, total_copies, available_copies, created_by)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)`,
+				title, author, topic, format, location, yearVal, totalCopies, actorID)
 			if err != nil {
 				skipped++
 				continue
