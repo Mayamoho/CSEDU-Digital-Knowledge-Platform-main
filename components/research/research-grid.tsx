@@ -126,16 +126,20 @@ function ResearchGridInner() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {paper.keywords?.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {paper.keywords.slice(0, 3).map((k, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{k}</Badge>
-                  ))}
-                  {paper.keywords.length > 3 && (
-                    <Badge variant="secondary" className="text-xs">+{paper.keywords.length - 3}</Badge>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const kws = (paper.keywords ?? []).flatMap((k) => k.split(",")).map((k) => k.trim()).filter(Boolean);
+                if (kws.length === 0) return null;
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {kws.slice(0, 3).map((k, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs max-w-full truncate">{k}</Badge>
+                    ))}
+                    {kws.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">+{kws.length - 3}</Badge>
+                    )}
+                  </div>
+                );
+              })()}
             </CardContent>
             <CardFooter className="pt-0">
               <Button variant="outline" className="w-full" asChild>

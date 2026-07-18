@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api";
+import { useFormDraft, clearFormDraft } from "@/lib/use-form-draft";
+
+const DRAFT_KEY = "draft:project-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +40,24 @@ export function ProjectUploadForm() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
+
+  useFormDraft(
+    DRAFT_KEY,
+    { title, teamMembers, supervisorId, academicYear, courseCode, abstract, keywords, webUrl, githubRepo, appDownload },
+    (d) => {
+      if (d.title !== undefined) setTitle(d.title);
+      if (d.teamMembers) setTeamMembers(d.teamMembers);
+      if (d.supervisorId !== undefined) setSupervisorId(d.supervisorId);
+      if (d.academicYear !== undefined) setAcademicYear(d.academicYear);
+      if (d.courseCode !== undefined) setCourseCode(d.courseCode);
+      if (d.abstract !== undefined) setAbstract(d.abstract);
+      if (d.keywords) setKeywords(d.keywords);
+      if (d.webUrl !== undefined) setWebUrl(d.webUrl);
+      if (d.githubRepo !== undefined) setGithubRepo(d.githubRepo);
+      if (d.appDownload !== undefined) setAppDownload(d.appDownload);
+    },
+    !isUploading,
+  );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setError("");
@@ -160,6 +181,7 @@ export function ProjectUploadForm() {
         app_download: appDownload || undefined,
       });
 
+      clearFormDraft(DRAFT_KEY);
       toast.success("Project published successfully! It's now visible in the projects showcase.");
       router.push('/projects');
       

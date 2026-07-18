@@ -159,20 +159,24 @@ function ProjectsGridInner() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              {project.keywords && project.keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {project.keywords.slice(0, 3).map((keyword, index) => (
-                    <Badge key={index} variant="secondary" className="text-xs">
-                      {keyword}
-                    </Badge>
-                  ))}
-                  {project.keywords.length > 3 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{project.keywords.length - 3}
-                    </Badge>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const kws = (project.keywords ?? []).flatMap((k) => k.split(",")).map((k) => k.trim()).filter(Boolean);
+                if (kws.length === 0) return null;
+                return (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {kws.slice(0, 3).map((keyword, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs max-w-full truncate">
+                        {keyword}
+                      </Badge>
+                    ))}
+                    {kws.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{kws.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })()}
               
               {/* Project Links */}
               <div className="flex flex-wrap gap-2 mb-3">

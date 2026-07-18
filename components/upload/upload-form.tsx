@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api";
+import { useFormDraft, clearFormDraft } from "@/lib/use-form-draft";
 import { RoleGate } from "@/components/auth/role-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +111,23 @@ export function UploadForm({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
+
+  const draftKey = `draft:upload-${itemType}`;
+  useFormDraft(
+    draftKey,
+    { titleState, abstract, keywords, accessTier, language, status, externalURL, uploadMode },
+    (d) => {
+      if (d.titleState !== undefined) setTitle(d.titleState);
+      if (d.abstract !== undefined) setAbstract(d.abstract);
+      if (d.keywords !== undefined) setKeywords(d.keywords);
+      if (d.accessTier !== undefined) setAccessTier(d.accessTier);
+      if (d.language !== undefined) setLanguage(d.language);
+      if (d.status !== undefined) setStatus(d.status);
+      if (d.externalURL !== undefined) setExternalURL(d.externalURL);
+      if (d.uploadMode !== undefined) setUploadMode(d.uploadMode);
+    },
+    !isUploading,
+  );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setError("");
@@ -224,6 +242,7 @@ export function UploadForm({
         ? "File saved as draft! You can submit for review later."
         : "File submitted for review! It will be reviewed by a librarian or researcher.";
 
+      clearFormDraft(draftKey);
       toast.success(statusMessage);
       removeFile();
       setExternalURL("");

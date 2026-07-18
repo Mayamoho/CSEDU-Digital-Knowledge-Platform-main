@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api";
+import { useFormDraft, clearFormDraft } from "@/lib/use-form-draft";
+
+const DRAFT_KEY = "draft:research-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +39,23 @@ export function ResearchUploadForm() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
+
+  useFormDraft(
+    DRAFT_KEY,
+    { title, authors, coAuthors, abstract, keywords, publicationDate, doi, journal, conference },
+    (d) => {
+      if (d.title !== undefined) setTitle(d.title);
+      if (d.authors) setAuthors(d.authors);
+      if (d.coAuthors) setCoAuthors(d.coAuthors);
+      if (d.abstract !== undefined) setAbstract(d.abstract);
+      if (d.keywords) setKeywords(d.keywords);
+      if (d.publicationDate !== undefined) setPublicationDate(d.publicationDate);
+      if (d.doi !== undefined) setDoi(d.doi);
+      if (d.journal !== undefined) setJournal(d.journal);
+      if (d.conference !== undefined) setConference(d.conference);
+    },
+    !isUploading,
+  );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setError("");
@@ -152,6 +172,7 @@ export function ResearchUploadForm() {
         file_path: mediaResult.file_path || '',
       });
 
+      clearFormDraft(DRAFT_KEY);
       toast.success("Research paper saved as draft! You can submit it for review from your uploads.");
       router.push('/my-uploads');
       
