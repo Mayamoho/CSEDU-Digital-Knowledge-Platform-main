@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/lib/auth-context'
+import { LanguageProvider } from '@/lib/i18n'
 import { Toaster } from '@/components/ui/sonner'
 import { FloatingChatWidget } from '@/components/ai-chat/floating-chat-widget'
 import './globals.css'
@@ -56,9 +57,11 @@ export default function RootLayout({
     <html lang="en" className="bg-background">
       <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
         <AuthProvider>
-          {children}
-          <Toaster />
-          <FloatingChatWidget />
+          <LanguageProvider>
+            {children}
+            <Toaster />
+            <FloatingChatWidget />
+          </LanguageProvider>
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

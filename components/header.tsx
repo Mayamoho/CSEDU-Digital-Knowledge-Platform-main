@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { CommandPalette } from "@/components/command-palette";
+import { useI18n } from "@/lib/i18n";
 
 const mainNavItems = [
   { href: "/catalog", label: "Library Catalog", icon: Library },
@@ -53,6 +54,7 @@ const uploadNavItems = [
 export function Header() {
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuth();
+  const { lang, setLang, t } = useI18n();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -114,7 +116,7 @@ export function Header() {
               )}
             >
               <item.icon className="h-4 w-4" />
-              {item.label}
+              {t(item.label)}
             </Link>
           ))}
           
@@ -160,6 +162,15 @@ export function Header() {
           >
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLang(lang === "en" ? "bn" : "en")}
+            className="hidden px-2 font-medium sm:flex"
+            title="Switch language"
+          >
+            {lang === "en" ? "বাংলা" : "EN"}
           </Button>
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
 

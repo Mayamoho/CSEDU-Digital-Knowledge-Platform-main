@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { MediaDetailView } from "@/components/media/media-detail-view";
+import { AskAboutResource } from "@/components/ai-chat/ask-about-resource";
 
 export const metadata: Metadata = {
   title: "Archive Item",
@@ -14,6 +15,9 @@ export default async function ArchiveDetailPage({ params }: { params: Promise<{ 
   return (
     <AuthGuard requireAuth>
       <MediaDetailView itemId={itemId} itemType="archive" />
+      <div className="container max-w-4xl px-4 pb-8">
+        <AskAboutResource id={itemId} kind="archive" />
+      </div>
     </AuthGuard>
   );
 }
