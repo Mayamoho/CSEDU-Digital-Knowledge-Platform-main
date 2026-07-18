@@ -696,9 +696,13 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Explicit casts are required: without them Postgres infers $3/$4 from the
+	// untyped '{}' literal as plain text (not text[]), so pgx fails to encode the
+	// []string and the whole update errors out.
 	_, err := h.db.Exec(r.Context(),
 		`INSERT INTO media_metadata (item_id, abstract, keywords, tags, language)
-		 VALUES ($1, COALESCE($2,''), COALESCE($3,'{}'), COALESCE($4,'{}'), COALESCE($5,'en'))
+		 VALUES ($1, COALESCE($2::text,''), COALESCE($3::text[],'{}'::text[]),
+		         COALESCE($4::text[],'{}'::text[]), COALESCE($5::text,'en'))
 		 ON CONFLICT (item_id) DO UPDATE SET
 		   abstract = COALESCE(EXCLUDED.abstract, media_metadata.abstract),
 		   keywords = COALESCE(EXCLUDED.keywords, media_metadata.keywords),

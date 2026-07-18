@@ -30,6 +30,7 @@ import {
   ArrowLeft,
   Edit,
   ExternalLink,
+  Share2,
   Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
@@ -88,6 +89,15 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
 
   const handleDownload = async () => {
     window.location.href = `/api/v1/media/${itemId}/download`;
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Could not copy link");
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -155,11 +165,16 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         <Button variant="ghost" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Back
         </Button>
-        {canEdit && (
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Edit className="h-4 w-4 mr-2" /> Edit
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleShare}>
+            <Share2 className="h-4 w-4 mr-2" /> Share
           </Button>
-        )}
+          {canEdit && (
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Edit className="h-4 w-4 mr-2" /> Edit
+            </Button>
+          )}
+        </div>
       </div>
 
       {showImage && (

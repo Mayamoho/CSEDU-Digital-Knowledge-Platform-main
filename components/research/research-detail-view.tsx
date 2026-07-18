@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileText, Calendar, User, Download, Edit, ArrowLeft, AlertCircle, Send, CheckCircle, XCircle, BookOpen } from "lucide-react";
+import { FileText, Calendar, User, Download, Edit, ArrowLeft, AlertCircle, Send, CheckCircle, XCircle, BookOpen, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
@@ -71,6 +71,15 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
   };
 
   useEffect(() => { loadPaper(); }, [paperId]);
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  };
 
   const handleSubmitForReview = async () => {
     if (!paper) return;
@@ -185,6 +194,9 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Research
         </Button>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleShare}>
+            <Share2 className="h-4 w-4 mr-2" /> Share
+          </Button>
           {canEdit && (
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Edit className="h-4 w-4 mr-2" /> Edit
