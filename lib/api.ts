@@ -933,6 +933,28 @@ class APIClient {
       body: JSON.stringify({ approved, notes }),
     });
   }
+
+  // Resource reviews & ratings
+  async listReviews(itemId: string): Promise<{ reviews: ResourceReview[]; average: number; count: number }> {
+    return this.request(`/reviews/${itemId}`);
+  }
+
+  async submitReview(itemId: string, rating: number, body: string): Promise<{ message: string }> {
+    return this.request(`/reviews/${itemId}`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, body }),
+    });
+  }
+}
+
+export interface ResourceReview {
+  review_id: string;
+  item_id: string;
+  user_id: string;
+  user_name: string;
+  rating: number;
+  body: string;
+  created_at: string;
 }
 
 export const apiClient = new APIClient();

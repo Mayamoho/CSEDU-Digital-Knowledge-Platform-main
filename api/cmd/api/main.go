@@ -26,6 +26,7 @@ import (
 	"github.com/csedu/platform/api/internal/middleware"
 	"github.com/csedu/platform/api/internal/notify"
 	"github.com/csedu/platform/api/internal/projects"
+	"github.com/csedu/platform/api/internal/reviews"
 	"github.com/csedu/platform/api/internal/research"
 	"github.com/csedu/platform/api/internal/roles"
 	"github.com/csedu/platform/api/internal/storage"
@@ -89,6 +90,7 @@ func main() {
 	researchHandler := research.NewHandler(pool)
 	projectsHandler := projects.NewHandler(pool)
 	notifyHandler := notify.NewHandler(pool)
+	reviewsHandler := reviews.NewHandler(pool)
 	rolesHandler := roles.NewHandler(pool)
 
 	r := chi.NewRouter()
@@ -297,6 +299,15 @@ func main() {
 			r.Get("/", notifyHandler.List)
 			r.Post("/{id}/read", notifyHandler.MarkRead)
 			r.Post("/read-all", notifyHandler.MarkAllRead)
+		})
+
+		// ── Resource reviews & ratings ─────────────────────────────────────
+		r.Route("/reviews", func(r chi.Router) {
+			r.Get("/{itemId}", reviewsHandler.List)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.Authenticate)
+				r.Post("/{itemId}", reviewsHandler.Create)
+			})
 		})
 
 		// AI Chat (authenticated users)
