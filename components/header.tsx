@@ -31,10 +31,11 @@ import {
   ArrowUpCircle,
   Inbox,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { CommandPalette } from "@/components/command-palette";
 
 const mainNavItems = [
   { href: "/catalog", label: "Library Catalog", icon: Library },
@@ -53,6 +54,19 @@ export function Header() {
   const pathname = usePathname();
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const getInitials = (name: string) => {
     return name
@@ -125,11 +139,29 @@ export function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {/* Search button */}
-          <Button variant="ghost" size="icon" className="hidden sm:flex">
+          {/* Search / command palette */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCommandOpen(true)}
+            className="hidden gap-2 text-muted-foreground sm:flex"
+          >
+            <Search className="h-4 w-4" />
+            <span className="hidden md:inline">Search…</span>
+            <kbd className="pointer-events-none hidden select-none rounded border bg-muted px-1.5 font-mono text-[10px] font-medium md:inline">
+              ⌘K
+            </kbd>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCommandOpen(true)}
+            className="sm:hidden"
+          >
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>
           </Button>
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
 
           {isAuthenticated && user && <NotificationBell />}
 
