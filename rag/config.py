@@ -16,13 +16,13 @@ class Settings(BaseSettings):
     # Groq API
     groq_api_key: Optional[str] = None
     groq_model_simple: str = "llama-3.1-8b-instant"
-    groq_model_long: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    groq_model_long: str = "llama-3.3-70b-versatile"
     groq_model_complex: str = "openai/gpt-oss-120b"
     groq_timeout: int = 30
 
     # Gemini API (Fallback)
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_model: str = "gemini-2.5-flash"
 
     # Embedding Model (fastembed — ONNX, no torch needed)
     embedding_model: str = "BAAI/bge-base-en-v1.5"
