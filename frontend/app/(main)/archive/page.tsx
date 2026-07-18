@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { FolderOpen } from "lucide-react";
 import { ArchiveGrid } from "@/components/archive/archive-grid";
 import { ArchiveSearch } from "@/components/archive/archive-search";
 import { ArchiveFilters } from "@/components/archive/archive-filters";
+import { ModuleHero } from "@/components/module-hero";
 
 export const metadata: Metadata = {
   title: "Digital Archive",
@@ -12,14 +14,11 @@ export const metadata: Metadata = {
 export default function ArchivePage() {
   return (
     <div className="container px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Digital Archive
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Browse historical documents, departmental records, and multimedia archives.
-        </p>
-      </div>
+      <ModuleHero
+        title="Digital Archive"
+        description="Browse historical documents, departmental records, and multimedia archives."
+        icon={<FolderOpen className="h-6 w-6" />}
+      />
 
       <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
         <div className="flex flex-col gap-6">

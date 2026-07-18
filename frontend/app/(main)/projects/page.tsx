@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { BookOpen } from "lucide-react";
 import { ProjectsGrid } from "@/components/projects/projects-grid";
 import { ProjectsSearch } from "@/components/projects/projects-search";
 import { ProjectsFilters } from "@/components/projects/projects-filters";
+import { ModuleHero } from "@/components/module-hero";
 
 export const metadata: Metadata = {
   title: "Student Projects",
@@ -11,14 +13,11 @@ export const metadata: Metadata = {
 export default function ProjectsPage() {
   return (
     <div className="container px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Student Projects
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Showcase student projects, final year works, and creative achievements.
-        </p>
-      </div>
+      <ModuleHero
+        title="Student Projects"
+        description="Showcase student projects, final year works, and creative achievements."
+        icon={<BookOpen className="h-6 w-6" />}
+      />
 
       <div className="flex flex-col gap-6">
         <ProjectsSearch />
