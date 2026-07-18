@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, X, Send, MessageCircle, Sparkles } from "lucide-react";
+import { Bot, X, Send, MessageCircle, Sparkles, BookOpen } from "lucide-react";
 import { apiClient, ChatResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -107,7 +108,7 @@ export function FloatingChatWidget() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Failed to send chat message:", error);
-      
+
       let errorMessage = "Sorry, I encountered an error while processing your request. Please try again.";
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch')) {
@@ -127,6 +128,7 @@ export function FloatingChatWidget() {
       };
 
       setMessages((prev) => [...prev, errorResponse]);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

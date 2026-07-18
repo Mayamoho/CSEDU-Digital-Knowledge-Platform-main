@@ -133,13 +133,6 @@ export function UploadForm({
       }
       return acc;
     }, {} as Record<string, string[]>),
-      "application/vnd.ms-excel": [".xls"],
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-      "video/mp4": [".mp4"],
-      "audio/mpeg": [".mp3"],
-      "image/jpeg": [".jpg", ".jpeg"],
-      "image/png": [".png"],
-    },
   });
 
   const removeFile = () => {

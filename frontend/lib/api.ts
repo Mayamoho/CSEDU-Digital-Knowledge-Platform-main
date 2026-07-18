@@ -702,6 +702,5 @@ class APIClient {
     }
   }
 }
-}
 
 export const apiClient = new APIClient();
