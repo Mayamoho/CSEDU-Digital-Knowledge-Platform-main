@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 from database import db
 from embedder import embedder
 from config import settings
+from fts_config import fts_config_for_language
 import logging
 
 logger = logging.getLogger(__name__)
@@ -153,8 +154,11 @@ class HybridRetriever:
         Perform PostgreSQL full-text search
         Searches BOTH media_items (research/projects/archives) AND library_catalog (books)
         """
-        # Choose FTS configuration based on language
-        fts_config = "english" if language == "en" else "simple"
+        # Choose FTS configuration based on language.
+        # Bangla uses the dedicated `bangla` config (registered in
+        # migration 012_bangla_fts.sql) which wraps the `simple`
+        # dictionary; English uses the built-in `english` stemmer.
+        fts_config = fts_config_for_language(language)
         
         # Search in media items (research papers, projects, archives with embeddings)
         media_query = f"""

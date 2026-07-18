@@ -686,11 +686,22 @@ class APIClient {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-    return this.request('/auth/reset-password', {
+    return this.request(`/auth/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ token, new_password: newPassword }),
     });
   }
+
+  // SSO (OAuth 2.0) availability — reports whether the backend has an
+  // institutional identity provider configured (SDD Flow 4).
+  async getSSOStatus(): Promise<{ enabled: boolean; provider?: string }> {
+    try {
+      return await this.request(`/auth/sso/status`);
+    } catch {
+      return { enabled: false };
+    }
+  }
+}
 }
 
 export const apiClient = new APIClient();

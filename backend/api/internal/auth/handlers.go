@@ -360,6 +360,10 @@ func GetRoleTier(r *http.Request) (string, bool) {
 var CtxUserID   = ctxUserID
 var CtxRoleTier = ctxRoleTier
 
+// Public aliases used by handler packages (kept in sync with the above).
+var UserIDKey   = ctxUserID
+var RoleTierKey = ctxRoleTier
+
 // ──────────────────────────────────────────────────────────────────────────────
 // PATCH /api/v1/auth/profile
 // ──────────────────────────────────────────────────────────────────────────────

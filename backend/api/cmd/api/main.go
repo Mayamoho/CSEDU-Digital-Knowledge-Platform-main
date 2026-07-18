@@ -58,6 +58,7 @@ func main() {
 	}
 
 	authHandler := auth.NewHandler(pool)
+	ssoHandler := auth.NewSSOHandler(pool)
 	libraryHandler := library.NewHandler(pool)
 	loanHandler := loan.NewHandler(pool, minio)
 	fineHandler := fine.NewHandler(pool)
@@ -121,6 +122,14 @@ func main() {
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/forgot-password", authHandler.ForgotPassword)
 			r.Post("/reset-password", authHandler.ResetPassword)
+
+			// SSO (OAuth 2.0) — status is always public so the
+			// frontend can decide whether to show the SSO button.
+			r.Get("/sso/status", ssoHandler.Status)
+			if ssoHandler.Enabled() {
+				r.Get("/sso/login", ssoHandler.Login)
+				r.Get("/sso/callback", ssoHandler.Callback)
+			}
 
 			// Protected auth routes
 			r.Group(func(r chi.Router) {

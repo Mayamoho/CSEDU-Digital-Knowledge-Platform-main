@@ -112,6 +112,12 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SDD §4.10 — reject obvious prompt-injection / jailbreak attempts.
+	if detectPromptInjection(req.Query) {
+		writeError(w, http.StatusBadRequest, "query contains disallowed content")
+		return
+	}
+
 	// Generate session ID if not provided
 	sessionID := req.SessionID
 	if sessionID == "" {
@@ -216,6 +222,12 @@ func (h *Handler) Summarize(w http.ResponseWriter, r *http.Request) {
 
 	if req.ItemID == "" {
 		writeError(w, http.StatusBadRequest, "item_id is required")
+		return
+	}
+
+	// SDD §4.10 — reject obvious prompt-injection / jailbreak attempts.
+	if detectPromptInjection(req.ItemID) {
+		writeError(w, http.StatusBadRequest, "item_id contains disallowed content")
 		return
 	}
 

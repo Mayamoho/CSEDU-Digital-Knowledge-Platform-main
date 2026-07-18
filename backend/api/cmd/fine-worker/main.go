@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/csedu/platform/api/internal/email"
 )
 
 func main() {
@@ -29,6 +31,8 @@ func main() {
 	}
 	defer pool.Close()
 
+	mailer := email.NewClient()
+
 	// Configuration
 	fineRatePerDay := getEnvFloat("FINE_RATE_BDT_PER_DAY", 50.0)
 	maxFinePerLoan := getEnvFloat("MAX_FINE_PER_LOAN_BDT", 500.0)
@@ -38,27 +42,37 @@ func main() {
 		fineRatePerDay, maxFinePerLoan, runInterval)
 
 	// Run immediately on start, then on schedule
-	calculateFines(pool, fineRatePerDay, maxFinePerLoan)
+	runCycle(pool, mailer, fineRatePerDay, maxFinePerLoan)
 
 	ticker := time.NewTicker(runInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		calculateFines(pool, fineRatePerDay, maxFinePerLoan)
+		runCycle(pool, mailer, fineRatePerDay, maxFinePerLoan)
 	}
 }
 
-func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
+// runCycle performs one pass of fine calculation + hold-fulfillment checks.
+func runCycle(pool *pgxpool.Pool, mailer *email.Client, ratePerDay, maxFine float64) {
+	calculateFines(pool, mailer, ratePerDay, maxFine)
+	processHoldFulfillments(pool, mailer)
+}
+
+func calculateFines(pool *pgxpool.Pool, mailer *email.Client, ratePerDay, maxFine float64) {
 	ctx := context.Background()
 	log.Println("Starting fine calculation...")
 
-	// Find all overdue loans without return_date
+	// Find all overdue loans with user + book details for notification.
 	query := `
-		SELECT loan_id, user_id, due_date
-		FROM loans
-		WHERE return_date IS NULL
-		  AND due_date < now()
-		  AND status = 'active'
+		SELECT l.loan_id, l.user_id, l.due_date,
+		       u.email, u.name,
+		       c.title
+		FROM loans l
+		JOIN users u ON u.user_id = l.user_id
+		JOIN library_catalog c ON c.catalog_id = l.catalog_id
+		WHERE l.return_date IS NULL
+		  AND l.due_date < now()
+		  AND l.status = 'active'
 	`
 
 	rows, err := pool.Query(ctx, query)
@@ -73,10 +87,10 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 	updated := 0
 
 	for rows.Next() {
-		var loanID, userID string
+		var loanID, userID, userEmail, userName, bookTitle string
 		var dueDate time.Time
 
-		if err := rows.Scan(&loanID, &userID, &dueDate); err != nil {
+		if err := rows.Scan(&loanID, &userID, &dueDate, &userEmail, &userName, &bookTitle); err != nil {
 			log.Printf("Error scanning row: %v", err)
 			continue
 		}
@@ -101,7 +115,6 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 			SET status = 'overdue'
 			WHERE loan_id = $1 AND status = 'active'
 		`, loanID)
-
 		if err != nil {
 			log.Printf("Error updating loan status for %s: %v", loanID, err)
 		}
@@ -110,13 +123,12 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 		result, err := pool.Exec(ctx, `
 			INSERT INTO fines (loan_id, user_id, amount, status, calculated_at)
 			VALUES ($1, $2, $3, 'pending', now())
-			ON CONFLICT (loan_id) 
-			DO UPDATE SET 
+			ON CONFLICT (loan_id)
+			DO UPDATE SET
 				amount = EXCLUDED.amount,
 				calculated_at = now()
 			WHERE fines.status = 'pending'
 		`, loanID, userID, fineAmount)
-
 		if err != nil {
 			log.Printf("Error upserting fine for loan %s: %v", loanID, err)
 			continue
@@ -124,17 +136,79 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 
 		rowsAffected := result.RowsAffected()
 		if rowsAffected > 0 {
-			if result.String() == "INSERT" {
-				created++
-			} else {
-				updated++
-			}
+			created++
 			log.Printf("Fine for loan %s: %.2f BDT (%d days overdue)", loanID, fineAmount, daysOverdue)
+
+			// Send overdue notification email (SDD §3.1.3).
+			if notifyErr := mailer.SendOverdueNotification(
+				userEmail, userName, bookTitle,
+				dueDate.Format("2006-01-02"), fineAmount,
+			); notifyErr != nil {
+				log.Printf("Overdue email failed for %s: %v", userEmail, notifyErr)
+			}
+		} else {
+			updated++
 		}
 	}
 
-	log.Printf("Fine calculation complete: %d loans processed, %d fines created, %d updated", 
+	log.Printf("Fine calculation complete: %d loans processed, %d fines created, %d updated",
 		processed, created, updated)
+}
+
+// processHoldFulfillments finds active holds whose catalog item now has an
+// available copy, marks the hold fulfilled, records notified_at, and emails
+// the member (SDD Flow 3 / §4.1 holds).
+func processHoldFulfillments(pool *pgxpool.Pool, mailer *email.Client) {
+	ctx := context.Background()
+	log.Println("Checking hold fulfillments...")
+
+	query := `
+		SELECT h.hold_id, h.user_id, h.catalog_id,
+		       u.email, u.name, c.title
+		FROM holds h
+		JOIN users u ON u.user_id = h.user_id
+		JOIN library_catalog c ON c.catalog_id = h.catalog_id
+		WHERE h.status = 'active'
+		  AND h.notified_at IS NULL
+		  AND c.available_copies > 0
+	`
+
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		log.Printf("Error querying fulfillable holds: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	fulfilled := 0
+	for rows.Next() {
+		var holdID, userID, catalogID, userEmail, userName, bookTitle string
+		if err := rows.Scan(&holdID, &userID, &catalogID, &userEmail, &userName, &bookTitle); err != nil {
+			log.Printf("Error scanning hold row: %v", err)
+			continue
+		}
+
+		_, err = pool.Exec(ctx, `
+			UPDATE holds
+			SET status = 'fulfilled', notified_at = now()
+			WHERE hold_id = $1
+		`, holdID)
+		if err != nil {
+			log.Printf("Error fulfilling hold %s: %v", holdID, err)
+			continue
+		}
+
+		fulfilled++
+		log.Printf("Hold %s fulfilled for %s (%s)", holdID, userName, bookTitle)
+
+		if notifyErr := mailer.SendHoldAvailableNotification(userEmail, userName, bookTitle); notifyErr != nil {
+			log.Printf("Hold-available email failed for %s: %v", userEmail, notifyErr)
+		}
+	}
+
+	if fulfilled > 0 {
+		log.Printf("Hold fulfillment complete: %d holds fulfilled", fulfilled)
+	}
 }
 
 func getEnv(key, fallback string) string {

@@ -588,7 +588,7 @@ func (h *Handler) MyUploads(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteMedia(w http.ResponseWriter, r *http.Request) {
 	itemID := chi.URLParam(r, "itemId")
 	userID := r.Context().Value(authpkg.UserIDKey).(string)
-	roleTier := r.Context().Value(authpkg.RoleKey).(string)
+	roleTier := r.Context().Value(authpkg.RoleTierKey).(string)
 
 	var ownerID, status, filePath string
 	err := h.db.QueryRow(r.Context(),
