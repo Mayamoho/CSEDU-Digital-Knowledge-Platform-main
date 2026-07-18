@@ -22,7 +22,8 @@ echo ""
 echo "1b. Applying database migrations..."
 MIGRATIONS="002_media_url_format 005_book_topics 006_rag_index_state \
    007_barcodes 008_notifications_role_requests 009_ingestion_status \
-   010_catalog_isbn_unique 011_hold_notified_at 012_bangla_fts"
+   010_catalog_isbn_unique 011_hold_notified_at 012_bangla_fts \
+   013_reviews"
 for m in $MIGRATIONS; do
   echo "   - $m"
   docker compose -f docker-compose.prod.yml exec -T \
