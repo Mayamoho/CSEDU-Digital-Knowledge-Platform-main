@@ -28,6 +28,8 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U csedu_user -d csedu_platform < infra/db/migrations/008_notifications_role_requests.sql || true
 docker compose -f docker-compose.prod.yml exec -T postgres \
   psql -U csedu_user -d csedu_platform < infra/db/migrations/009_ingestion_status.sql || true
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U csedu_user -d csedu_platform < infra/db/migrations/010_catalog_isbn_unique.sql || true
 
 # Rebuild frontend, API and RAG service with all fixes
 echo ""

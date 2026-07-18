@@ -313,28 +313,33 @@ func (h *Handler) ImportCatalogCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if isbn != "" {
-			// Upsert by ISBN
-			tag, err := h.db.Exec(r.Context(),
+			// Upsert by ISBN. The unique index on isbn is partial
+			// (WHERE isbn IS NOT NULL), so the same predicate must be
+			// repeated for Postgres to infer it as the conflict target.
+			// xmax = 0 on the returned row means it was freshly inserted.
+			var wasInserted bool
+			err := h.db.QueryRow(r.Context(),
 				`INSERT INTO library_catalog
 				   (title, author, isbn, topic, format, location, year, total_copies, available_copies)
 				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
-				 ON CONFLICT (isbn) DO UPDATE SET
+				 ON CONFLICT (isbn) WHERE isbn IS NOT NULL DO UPDATE SET
 				   title            = EXCLUDED.title,
 				   author           = EXCLUDED.author,
 				   topic            = EXCLUDED.topic,
 				   format           = EXCLUDED.format,
 				   location         = EXCLUDED.location,
 				   year             = EXCLUDED.year,
-				   total_copies     = EXCLUDED.total_copies`,
-				title, author, isbn, topic, format, location, yearVal, totalCopies)
+				   total_copies     = EXCLUDED.total_copies
+				 RETURNING (xmax = 0)`,
+				title, author, isbn, topic, format, location, yearVal, totalCopies).Scan(&wasInserted)
 			if err != nil {
 				skipped++
 				continue
 			}
-			if tag.RowsAffected() > 0 {
-				updated++
-			} else {
+			if wasInserted {
 				inserted++
+			} else {
+				updated++
 			}
 		} else {
 			// No ISBN — always insert

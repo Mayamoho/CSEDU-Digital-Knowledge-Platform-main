@@ -31,6 +31,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from embedder import embedder
+from keyword_extractor import extract_keywords
 
 try:
     import fitz  # PyMuPDF
@@ -256,6 +257,33 @@ def index_item(conn, minio_client, item: dict) -> int:
             logger.info("    extracted %d chars of PDF text", len(body))
 
     document = header + ("\n\n" + body if body else "")
+
+    # FR-AI-012: when the item carries no human keywords, ask the LLM for some
+    # and persist them so catalog facets + FTS benefit, not just the AI answer.
+    # Done in its own short transaction BEFORE the embedding txn below — the LLM
+    # call can take seconds, and we must not hold a media_items lock open while
+    # it runs (that has caused deploy-time idle-in-transaction hangs).
+    if not item.get("keywords"):
+        ai_keywords = extract_keywords(document)
+        if ai_keywords:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO media_metadata (item_id, keywords)
+                        VALUES (%s, %s)
+                        ON CONFLICT (item_id)
+                        DO UPDATE SET keywords = EXCLUDED.keywords
+                        """,
+                        (str(item["item_id"]), ai_keywords),
+                    )
+                conn.commit()
+                item["keywords"] = ai_keywords
+                document += "\nKeywords: " + ", ".join(ai_keywords)
+            except Exception as e:  # noqa: BLE001
+                conn.rollback()
+                logger.warning("    could not save AI keywords: %s", e)
+
     chunks = chunk_text(document)
     if not chunks:
         logger.warning("    no text to index")
