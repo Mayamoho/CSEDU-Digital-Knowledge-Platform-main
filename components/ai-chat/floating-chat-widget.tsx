@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -314,17 +315,16 @@ export function FloatingChatWidget() {
                               const isUuid = /^[0-9a-f-]{36}$/.test(id);
                               if (isUuid) {
                                 return (
-                                  <a
+                                  <Link
                                     key={index}
                                     href={`/archive/${id}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    onClick={() => setIsOpen(false)}
                                     className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20 transition-colors"
                                     title="Open source document"
                                   >
                                     <BookOpen className="h-3 w-3" />
                                     {citation || "Source"}
-                                  </a>
+                                  </Link>
                                 );
                               }
                               return (

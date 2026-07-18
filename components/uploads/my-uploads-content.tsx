@@ -128,7 +128,15 @@ export function MyUploadsContent() {
     const resolvePaperId = async (): Promise<string | undefined> => {
       if (item.paper_id) return item.paper_id;
       try {
-        const res = await apiClient.listResearch();
+        // Right after upload the research_papers row may not be joined yet
+        // (read-after-write timing), so re-fetch the uploads before giving up.
+        const fresh = await apiClient.getMyUploads({ per_page: 100 });
+        setUploads(fresh.data);
+        const match = fresh.data.find((u) => u.item_id === item.item_id);
+        if (match?.paper_id) return match.paper_id;
+        // Last resort: scan the research list (wide page so drafts past the
+        // first page are still found).
+        const res = await apiClient.listResearch({ per_page: 100 });
         return res?.data?.find((p) => p.item_id === item.item_id)?.paper_id;
       } catch (error) {
         console.error("Failed to resolve research paper:", error);
@@ -137,7 +145,7 @@ export function MyUploadsContent() {
     };
 
     const reloadUploads = async () => {
-      const response = await apiClient.getMyUploads({ per_page: 50 });
+      const response = await apiClient.getMyUploads({ per_page: 100 });
       setUploads(response.data);
     };
 
@@ -190,15 +198,7 @@ export function MyUploadsContent() {
       }
 
       if (item.item_type === 'research') {
-        let paperId = item.paper_id;
-        if (!paperId) {
-          try {
-            const res = await apiClient.listResearch();
-            paperId = res?.data?.find((p) => p.item_id === item.item_id)?.paper_id;
-          } catch (error) {
-            console.error("Failed to resolve research paper:", error);
-          }
-        }
+        const paperId = await resolvePaperId();
         if (paperId) {
           window.location.href = `/research/${paperId}`;
           return;
@@ -209,7 +209,7 @@ export function MyUploadsContent() {
         let projectId = item.project_id;
         if (!projectId) {
           try {
-            const res = await apiClient.listProjects();
+            const res = await apiClient.listProjects({ per_page: 100 });
             projectId = res?.data?.find((p) => p.item_id === item.item_id)?.project_id;
           } catch (error) {
             console.error("Failed to resolve project:", error);
