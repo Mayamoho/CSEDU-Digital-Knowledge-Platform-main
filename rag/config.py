@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Gemini API (Fallback)
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"
 
     # Embedding Model (fastembed — ONNX, no torch needed)
     embedding_model: str = "BAAI/bge-base-en-v1.5"
