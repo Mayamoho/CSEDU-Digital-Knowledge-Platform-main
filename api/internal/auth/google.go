@@ -62,6 +62,16 @@ func randomState() string {
 	return hex.EncodeToString(b)
 }
 
+// GET /api/v1/auth/providers — report which optional sign-in methods are
+// configured so the UI can hide buttons that would only 503. Magic-link is
+// always available (it only needs SMTP, which the platform ships with).
+func (h *Handler) Providers(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"google": GoogleEnabled(),
+		"magic":  true,
+	})
+}
+
 // GET /api/v1/auth/google/login
 func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	if !GoogleEnabled() {

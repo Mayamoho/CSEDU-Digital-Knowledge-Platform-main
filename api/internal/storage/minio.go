@@ -74,6 +74,12 @@ func (m *MinioClient) GetObject(ctx context.Context, objectKey string) (*minio.O
 	return obj, nil
 }
 
+// Remove deletes an object from MinIO. Best-effort: a missing object is not an
+// error the caller needs to act on.
+func (m *MinioClient) Remove(ctx context.Context, objectKey string) error {
+	return m.client.RemoveObject(ctx, m.bucket, objectKey, minio.RemoveObjectOptions{})
+}
+
 // PresignedURL returns a temporary download URL (15 minutes).
 func (m *MinioClient) PresignedURL(ctx context.Context, objectKey string) (string, error) {
 	u, err := m.client.PresignedGetObject(ctx, m.bucket, objectKey, 15*60*1000000000, nil)

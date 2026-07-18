@@ -840,3 +840,65 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 		"format":    ext,
 	})
 }
+
+// DELETE /api/v1/media/{itemId} — permanently delete a media item the caller
+// owns (administrators/librarians may delete any). The media_items row cascades
+// to research_papers, student_projects and vector_embeddings (RAG context) via
+// ON DELETE CASCADE, so this single delete also removes the resource from the
+// assistant's knowledge everywhere. resource_reviews has no FK, so it is cleared
+// explicitly. The stored file is best-effort removed from object storage.
+func (h *Handler) DeleteMedia(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	roleTier, _ := authpkg.GetRoleTier(r)
+
+	id := chi.URLParam(r, "itemId")
+
+	var createdBy *string
+	var filePath *string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT created_by, file_path FROM media_items WHERE item_id = $1`, id,
+	).Scan(&createdBy, &filePath); err != nil {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+
+	isOwner := createdBy != nil && *createdBy == userID
+	isModerator := roleTier == "administrator" || roleTier == "librarian"
+	if !isOwner && !isModerator {
+		writeError(w, http.StatusForbidden, "you can only delete your own uploads")
+		return
+	}
+
+	// resource_reviews is keyed by item_id with no FK, so clear it first.
+	if _, err := h.db.Exec(r.Context(),
+		`DELETE FROM resource_reviews WHERE item_id = $1`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not delete reviews")
+		return
+	}
+
+	// Cascades to research_papers, student_projects, vector_embeddings.
+	ct, err := h.db.Exec(r.Context(),
+		`DELETE FROM media_items WHERE item_id = $1`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not delete item")
+		return
+	}
+	if ct.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+
+	// Best-effort remove the stored file; a storage error must not fail the
+	// request since the database record is already gone.
+	if filePath != nil && *filePath != "" && h.minio != nil {
+		if err := h.minio.Remove(r.Context(), *filePath); err != nil {
+			fmt.Printf("Failed to remove object %s: %v\n", *filePath, err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "item deleted"})
+}

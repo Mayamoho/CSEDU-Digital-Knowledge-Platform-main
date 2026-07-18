@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RequestedRole string `json:"requested_role"`
 		Justification string `json:"justification"`
+		UniversityID  string `json:"university_id"`
+		EvidenceURL   string `json:"evidence_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid body")
@@ -58,12 +61,30 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rigorous verification: the applicant must justify the request and give an
+	// administrator something to check against before elevated access is granted.
+	req.Justification = strings.TrimSpace(req.Justification)
+	req.UniversityID = strings.TrimSpace(req.UniversityID)
+	req.EvidenceURL = strings.TrimSpace(req.EvidenceURL)
+	if len([]rune(req.Justification)) < 40 {
+		writeError(w, http.StatusBadRequest, "Please describe your role and department affiliation in at least 40 characters.")
+		return
+	}
+	if req.UniversityID == "" {
+		writeError(w, http.StatusBadRequest, "A university / registration ID is required for verification.")
+		return
+	}
+	if !strings.HasPrefix(req.EvidenceURL, "http://") && !strings.HasPrefix(req.EvidenceURL, "https://") {
+		writeError(w, http.StatusBadRequest, "Provide a public evidence link (university profile, ORCID, or department page) starting with http:// or https://.")
+		return
+	}
+
 	var requestID string
 	err := h.db.QueryRow(r.Context(),
-		`INSERT INTO role_requests (user_id, requested_role, justification)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO role_requests (user_id, requested_role, justification, university_id, evidence_url)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING request_id`,
-		userID, req.RequestedRole, req.Justification,
+		userID, req.RequestedRole, req.Justification, req.UniversityID, req.EvidenceURL,
 	).Scan(&requestID)
 	if err != nil {
 		// The partial unique index rejects a second pending request.
@@ -76,6 +97,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	_ = h.db.QueryRow(r.Context(), `SELECT name FROM users WHERE user_id = $1`, userID).Scan(&applicantName)
 	title := "New role request"
 	body := fmt.Sprintf("%s requested the %s role.", applicantName, req.RequestedRole)
+	body += "\n\nUniversity/registration ID: " + req.UniversityID
+	body += "\nEvidence: " + req.EvidenceURL
 	if req.Justification != "" {
 		body += "\n\nReason: " + req.Justification
 	}
@@ -96,7 +119,7 @@ func (h *Handler) ListMine(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.db.Query(r.Context(),
 		`SELECT request_id, requested_role, justification, status, decision_notes,
-		        to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		        to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), university_id, evidence_url
 		 FROM role_requests WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -115,7 +138,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT rr.request_id, rr.requested_role, rr.justification, rr.status,
 		        rr.decision_notes,
-		        to_char(rr.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        to_char(rr.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), rr.university_id, rr.evidence_url,
 		        u.user_id, u.name, u.email, u.role_tier
 		 FROM role_requests rr JOIN users u ON u.user_id = rr.user_id
 		 WHERE rr.status = $1 ORDER BY rr.created_at ASC`, status)
@@ -209,6 +232,8 @@ type roleRequest struct {
 	Status        string  `json:"status"`
 	DecisionNotes string  `json:"decision_notes"`
 	CreatedAt     string  `json:"created_at"`
+	UniversityID  string  `json:"university_id"`
+	EvidenceURL   string  `json:"evidence_url"`
 	UserID        *string `json:"user_id,omitempty"`
 	Name          *string `json:"name,omitempty"`
 	Email         *string `json:"email,omitempty"`
@@ -226,13 +251,14 @@ func scanRequests(rows interface {
 		if withUser {
 			var uid, name, email, role string
 			if err := rows.Scan(&rr.RequestID, &rr.RequestedRole, &rr.Justification,
-				&rr.Status, &rr.DecisionNotes, &rr.CreatedAt, &uid, &name, &email, &role); err != nil {
+				&rr.Status, &rr.DecisionNotes, &rr.CreatedAt, &rr.UniversityID, &rr.EvidenceURL,
+				&uid, &name, &email, &role); err != nil {
 				continue
 			}
 			rr.UserID, rr.Name, rr.Email, rr.CurrentRole = &uid, &name, &email, &role
 		} else {
 			if err := rows.Scan(&rr.RequestID, &rr.RequestedRole, &rr.Justification,
-				&rr.Status, &rr.DecisionNotes, &rr.CreatedAt); err != nil {
+				&rr.Status, &rr.DecisionNotes, &rr.CreatedAt, &rr.UniversityID, &rr.EvidenceURL); err != nil {
 				continue
 			}
 		}

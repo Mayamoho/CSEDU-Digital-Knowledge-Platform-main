@@ -98,6 +98,25 @@ export function RoleRequestQueue() {
                         r.requested_role}
                     </Badge>
                   </div>
+                  {r.university_id && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">University/registration ID:</span>{" "}
+                      {r.university_id}
+                    </p>
+                  )}
+                  {r.evidence_url && (
+                    <p className="text-xs">
+                      <span className="font-medium text-foreground">Evidence:</span>{" "}
+                      <a
+                        href={r.evidence_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline break-all"
+                      >
+                        {r.evidence_url}
+                      </a>
+                    </p>
+                  )}
                   {r.justification && (
                     <p className="text-sm text-muted-foreground">{r.justification}</p>
                   )}

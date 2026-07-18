@@ -7,7 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, CheckCircle, AlertCircle, Eye } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -191,6 +202,20 @@ export function MyUploadsContent() {
       }
     };
 
+    const handleDelete = async () => {
+      setIsSubmitting(true);
+      try {
+        await apiClient.deleteMedia(item.item_id);
+        toast.success("Deleted. It's been removed from the app and the AI assistant.");
+        setUploads((prev) => prev.filter((u) => u.item_id !== item.item_id));
+      } catch (error) {
+        console.error("Failed to delete:", error);
+        toast.error(error instanceof Error ? error.message : "Failed to delete");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
     const handleViewDetails = async () => {
       if (item.item_type === 'archive') {
         window.location.href = `/archive/${item.item_id}`;
@@ -292,6 +317,36 @@ export function MyUploadsContent() {
               <Button variant="outline" size="sm" onClick={handleViewDetails}>
                 {derivedStatus === 'rejected' ? "Edit Paper" : "View Details"}
               </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSubmitting}
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete “{item.title}”?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes the {item.item_type} from the platform,
+                      the catalog, and the AI assistant&apos;s knowledge. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-white hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </CardContent>

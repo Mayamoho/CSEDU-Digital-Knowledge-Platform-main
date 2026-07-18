@@ -8,6 +8,7 @@ import { ROLE_DISPLAY_NAMES } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -32,8 +33,15 @@ export function RoleRequestCard() {
   const [requests, setRequests] = useState<RoleRequest[]>([]);
   const [role, setRole] = useState<string>("student");
   const [justification, setJustification] = useState("");
+  const [universityId, setUniversityId] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const justOk = justification.trim().length >= 40;
+  const idOk = universityId.trim().length > 0;
+  const urlOk = /^https?:\/\//.test(evidenceUrl.trim());
+  const canSubmit = justOk && idOk && urlOk;
 
   const load = async () => {
     setLoading(true);
@@ -56,9 +64,11 @@ export function RoleRequestCard() {
   const submit = async () => {
     setSubmitting(true);
     try {
-      await apiClient.createRoleRequest(role, justification.trim());
+      await apiClient.createRoleRequest(role, justification.trim(), universityId.trim(), evidenceUrl.trim());
       toast.success("Request submitted — an administrator will review it.");
       setJustification("");
+      setUniversityId("");
+      setEvidenceUrl("");
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to submit request");
@@ -109,17 +119,50 @@ export function RoleRequestCard() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Justification <span className="text-muted-foreground">(optional but recommended)</span>
+                  University / registration ID <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  value={universityId}
+                  onChange={(e) => setUniversityId(e.target.value)}
+                  placeholder="e.g. CSE registration/roll or staff ID at University of Dhaka"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Evidence link <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  value={evidenceUrl}
+                  onChange={(e) => setEvidenceUrl(e.target.value)}
+                  placeholder="Public proof: DU/CSE department profile, ORCID, or faculty page (https://...)"
+                />
+                {evidenceUrl.length > 0 && !urlOk && (
+                  <p className="text-xs text-destructive">Must start with http:// or https://</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Justification <span className="text-destructive">*</span>
                 </label>
                 <Textarea
                   value={justification}
                   onChange={(e) => setJustification(e.target.value)}
-                  placeholder="e.g. I am a faculty researcher in the CSE department; my staff ID is ..."
+                  placeholder="Explain your affiliation with the CSE department, University of Dhaka — your role, batch/session or designation, and why you need this access."
                   rows={4}
                 />
+                <p className={`text-xs ${justOk ? "text-muted-foreground" : "text-destructive"}`}>
+                  {justification.trim().length}/40 characters minimum
+                </p>
               </div>
 
-              <Button onClick={submit} disabled={submitting}>
+              <p className="text-xs text-muted-foreground">
+                Requests are manually verified against your ID and evidence link before any
+                elevated access is granted. False information will be rejected.
+              </p>
+
+              <Button onClick={submit} disabled={submitting || !canSubmit}>
                 {submitting ? "Submitting..." : "Submit request"}
               </Button>
             </>

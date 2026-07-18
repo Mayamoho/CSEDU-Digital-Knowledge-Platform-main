@@ -141,6 +141,9 @@ func main() {
 			r.Post("/login", authHandler.Login)
 			r.Post("/refresh", authHandler.Refresh)
 
+			// Which optional sign-in providers are configured (UI gating).
+			r.Get("/providers", authHandler.Providers)
+
 			// Google OAuth 2.0 SSO (SDD Flow 4). Full-page redirects, not XHR.
 			r.Get("/google/login", authHandler.GoogleLogin)
 			r.Get("/google/callback", authHandler.GoogleCallback)
@@ -261,6 +264,7 @@ func main() {
 				r.Get("/my-uploads", mediaHandler.MyUploads)
 				r.Patch("/{itemId}/metadata", mediaHandler.UpdateMetadata)
 				r.Post("/{itemId}/file", mediaHandler.ReplaceFile)
+				r.Delete("/{itemId}", mediaHandler.DeleteMedia)
 			})
 		})
 

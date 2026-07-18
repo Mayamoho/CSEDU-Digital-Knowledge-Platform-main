@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 // Full-page navigation to the Go API's Google OAuth entry point. This must be a
@@ -10,6 +10,21 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
   const [loading, setLoading] = useState(false);
+  // Only render when Google OAuth is actually configured on the server —
+  // otherwise the button would just navigate to a 503. Magic-link sign-in is the
+  // always-available alternative shown alongside.
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/auth/providers`)
+      .then((r) => (r.ok ? r.json() : { google: false }))
+      .then((p) => { if (active) setEnabled(Boolean(p?.google)); })
+      .catch(() => { if (active) setEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
+  if (!enabled) return null;
 
   return (
     <Button

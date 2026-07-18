@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { BookOpen, AlertCircle, Check, GraduationCap } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
 import { GoogleButton } from "@/components/auth/google-button";
+import { MagicLinkForm } from "@/components/auth/magic-link-form";
 
 const passwordRequirements = [
   { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -224,6 +225,8 @@ export default function RegisterPage() {
             </div>
 
             <GoogleButton label="Sign up with Google" />
+
+            <MagicLinkForm />
 
             <p className="text-center text-xs text-muted-foreground">
               By creating an account, you agree to our{" "}

@@ -39,6 +39,8 @@ export interface RoleRequest {
   status: 'pending' | 'approved' | 'rejected';
   decision_notes: string;
   created_at: string;
+  university_id: string;
+  evidence_url: string;
   // Present only in the admin queue listing:
   user_id?: string;
   name?: string;
@@ -539,6 +541,12 @@ class APIClient {
     return this.request(`/media/${itemId}/download`);
   }
 
+  // Permanently delete an owned media item (cascades to research/project rows and
+  // the RAG vector_embeddings, removing it from the assistant everywhere).
+  async deleteMedia(itemId: string): Promise<{ message: string }> {
+    return this.request(`/media/${itemId}`, { method: 'DELETE' });
+  }
+
   // Admin: list users
   async adminListUsers(params: { page?: number; per_page?: number } = {}): Promise<{ data: User[]; total: number; page: number; per_page: number }> {
     const sp = new URLSearchParams();
@@ -576,10 +584,20 @@ class APIClient {
   }
 
   // Role-upgrade requests (self-service)
-  async createRoleRequest(requestedRole: string, justification: string): Promise<{ request_id: string; status: string }> {
+  async createRoleRequest(
+    requestedRole: string,
+    justification: string,
+    universityId: string,
+    evidenceUrl: string,
+  ): Promise<{ request_id: string; status: string }> {
     return this.request(`/role-requests`, {
       method: 'POST',
-      body: JSON.stringify({ requested_role: requestedRole, justification }),
+      body: JSON.stringify({
+        requested_role: requestedRole,
+        justification,
+        university_id: universityId,
+        evidence_url: evidenceUrl,
+      }),
     });
   }
 
