@@ -45,6 +45,46 @@ def _indexed_hashes(conn) -> dict:
         return {row[0]: row[1] for row in cur.fetchall()}
 
 
+def _set_ingestion_status(conn, item_id, status, error=None) -> None:
+    """Record the RAG indexing outcome on media_items (separate from workflow
+    status). Best-effort: a bookkeeping failure must never mask the real error."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE media_items SET ingestion_status = %s, ingestion_error = %s "
+                "WHERE item_id = %s",
+                (status, error, item_id),
+            )
+        conn.commit()
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        logger.error("could not record ingestion_status=%s for %s: %s", status, item_id, e)
+
+
+def _alert_uploader(conn, item) -> None:
+    """In-app notification to the uploader that their item failed to index."""
+    uploader = item.get("created_by")
+    if not uploader:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO notifications (user_id, title, body, link) "
+                "VALUES (%s, %s, %s, %s)",
+                (
+                    uploader,
+                    "Ingestion failed",
+                    f"'{item.get('title')}' could not be indexed for AI search. "
+                    "It stays visible but won't appear in AI answers until re-processed.",
+                    None,
+                ),
+            )
+        conn.commit()
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        logger.error("could not alert uploader of %s: %s", item.get("item_id"), e)
+
+
 def _index_items(conn, minio_client, items) -> int:
     done = 0
     for item in items:
@@ -55,9 +95,12 @@ def _index_items(conn, minio_client, items) -> int:
                     "indexed '%s' (%s) -> %d chunks", item["title"], item["item_type"], chunks
                 )
                 done += 1
+            _set_ingestion_status(conn, item["item_id"], "indexed")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
             logger.error("failed to index %s: %s", item.get("item_id"), e)
+            _set_ingestion_status(conn, item["item_id"], "failed", str(e)[:500])
+            _alert_uploader(conn, item)
     return done
 
 

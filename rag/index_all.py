@@ -212,6 +212,7 @@ def fetch_items(conn, index_all: bool, item_ids: list | None = None):
             where += " AND mi.item_id NOT IN (SELECT DISTINCT item_id FROM vector_embeddings)"
     q = f"""
         SELECT mi.item_id, mi.title, mi.item_type, mi.format, mi.status,
+               mi.created_by,
                mi.file_path, mi.external_url,
                mm.abstract, mm.tags, mm.keywords,
                rp.authors AS rp_authors, rp.co_authors, rp.journal, rp.conference,

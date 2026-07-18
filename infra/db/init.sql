@@ -45,7 +45,9 @@ CREATE TABLE media_items (
     created_by  UUID        REFERENCES users(user_id) ON DELETE SET NULL,
     file_path   TEXT,
     external_url TEXT,  -- For YouTube videos, external links, etc.
-    upload_date TIMESTAMPTZ NOT NULL DEFAULT now()
+    upload_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ingestion_status TEXT,  -- NULL | 'indexed' | 'failed' (RAG indexing lifecycle, see migration 009)
+    ingestion_error  TEXT   -- last ingestion failure message, NULL when ok
 );
 
 ALTER TABLE media_items
