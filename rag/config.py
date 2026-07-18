@@ -31,9 +31,12 @@ class Settings(BaseSettings):
     # RAG Configuration
     chunk_size: int = 512
     chunk_overlap: int = 50
-    top_k_results: int = 10
-    vector_search_limit: int = 8
-    fts_search_limit: int = 8
+    # Widened so the assistant sees the breadth of the platform, not just a
+    # handful of chunks. top_k is the final context handed to the LLM after
+    # merging vector + catalog + media FTS + inventory.
+    top_k_results: int = 24
+    vector_search_limit: int = 16
+    fts_search_limit: int = 16
 
     # Query Configuration
     max_query_length: int = 5000
