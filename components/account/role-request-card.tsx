@@ -34,14 +34,16 @@ export function RoleRequestCard() {
   const [role, setRole] = useState<string>("student");
   const [justification, setJustification] = useState("");
   const [universityId, setUniversityId] = useState("");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const ALLOWED_EXT = ["pdf", "png", "jpg", "jpeg", "heic"];
   const justOk = justification.trim().length >= 40;
   const idOk = universityId.trim().length > 0;
-  const urlOk = /^https?:\/\//.test(evidenceUrl.trim());
-  const canSubmit = justOk && idOk && urlOk;
+  const fileExt = evidenceFile?.name.split(".").pop()?.toLowerCase() ?? "";
+  const fileOk = !!evidenceFile && ALLOWED_EXT.includes(fileExt);
+  const canSubmit = justOk && idOk && fileOk;
 
   const load = async () => {
     setLoading(true);
@@ -62,13 +64,15 @@ export function RoleRequestCard() {
   const hasPending = requests.some((r) => r.status === "pending");
 
   const submit = async () => {
+    if (!evidenceFile) return;
     setSubmitting(true);
     try {
-      await apiClient.createRoleRequest(role, justification.trim(), universityId.trim(), evidenceUrl.trim());
+      const { evidence_url } = await apiClient.uploadRoleEvidence(evidenceFile);
+      await apiClient.createRoleRequest(role, justification.trim(), universityId.trim(), evidence_url);
       toast.success("Request submitted — an administrator will review it.");
       setJustification("");
       setUniversityId("");
-      setEvidenceUrl("");
+      setEvidenceFile(null);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to submit request");
@@ -130,15 +134,21 @@ export function RoleRequestCard() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Evidence link <span className="text-destructive">*</span>
+                  Identity card <span className="text-destructive">*</span>
                 </label>
                 <Input
-                  value={evidenceUrl}
-                  onChange={(e) => setEvidenceUrl(e.target.value)}
-                  placeholder="Public proof: DU/CSE department profile, ORCID, or faculty page (https://...)"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.heic,application/pdf,image/png,image/jpeg,image/heic"
+                  onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
                 />
-                {evidenceUrl.length > 0 && !urlOk && (
-                  <p className="text-xs text-destructive">Must start with http:// or https://</p>
+                <p className="text-xs text-muted-foreground">
+                  Upload a scan or photo of your university/department identity card (PDF, PNG, JPG or HEIC).
+                </p>
+                {evidenceFile && !fileOk && (
+                  <p className="text-xs text-destructive">Unsupported file type — use PDF, PNG, JPG or HEIC.</p>
+                )}
+                {evidenceFile && fileOk && (
+                  <p className="text-xs text-muted-foreground">Selected: {evidenceFile.name}</p>
                 )}
               </div>
 
@@ -158,7 +168,7 @@ export function RoleRequestCard() {
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Requests are manually verified against your ID and evidence link before any
+                Requests are manually verified against your ID and identity card before any
                 elevated access is granted. False information will be rejected.
               </p>
 

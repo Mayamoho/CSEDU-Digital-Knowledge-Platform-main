@@ -119,7 +119,7 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
     if (!paper) return;
     setIsSaving(true);
     try {
-      await apiClient.updateResearch(paper.paper_id, {
+      const res = await apiClient.updateResearch(paper.paper_id, {
         title: editForm.title,
         authors: editForm.authors.split(",").map(s => s.trim()).filter(Boolean),
         co_authors: editForm.co_authors.split(",").map(s => s.trim()).filter(Boolean),
@@ -133,7 +133,9 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
       if (replacementFile) {
         await apiClient.replaceMediaFile(paper.item_id, replacementFile);
       }
-      toast.success("Paper updated successfully");
+      // Editing a published paper demotes it to draft; surface the server's note
+      // so the author knows they must resubmit it for review to publish again.
+      toast.success(res?.message || "Paper updated successfully");
       setEditOpen(false);
       setReplacementFile(null);
       await loadPaper();

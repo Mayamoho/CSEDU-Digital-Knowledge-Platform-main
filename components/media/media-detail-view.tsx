@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -44,7 +51,15 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [editForm, setEditForm] = useState({ title: "", abstract: "", keywords: "" });
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    abstract: "",
+    keywords: "",
+    access_tier: "public",
+    status: "published",
+    language: "en",
+  });
 
   const loadItem = async () => {
     try {
@@ -57,6 +72,9 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         title: data.title || "",
         abstract: data.metadata?.abstract || "",
         keywords: data.metadata?.keywords?.join(", ") || "",
+        access_tier: data.access_tier || "public",
+        status: data.status || "published",
+        language: data.metadata?.language || "en",
       });
     } catch (err) {
       console.error("Failed to load item:", err);
@@ -79,8 +97,15 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         title: editForm.title,
         abstract: editForm.abstract,
         keywords: editForm.keywords.split(",").map(k => k.trim()).filter(Boolean),
+        access_tier: editForm.access_tier,
+        status: editForm.status,
+        language: editForm.language,
       });
+      if (replacementFile) {
+        await apiClient.replaceMediaFile(itemId, replacementFile);
+      }
       toast.success("Updated successfully");
+      setReplacementFile(null);
       setEditOpen(false);
       await loadItem();
     } catch (err) {
@@ -247,7 +272,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Item</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
@@ -261,6 +286,54 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
             <div className="space-y-1">
               <Label>Keywords (comma-separated)</Label>
               <Input value={editForm.keywords} onChange={e => setEditForm(f => ({ ...f, keywords: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>Access Level</Label>
+                <Select value={editForm.access_tier} onValueChange={v => setEditForm(f => ({ ...f, access_tier: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="student">Students+</SelectItem>
+                    <SelectItem value="researcher">Researchers+</SelectItem>
+                    <SelectItem value="librarian">Librarians+</SelectItem>
+                    <SelectItem value="restricted">Restricted</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Publication Status</Label>
+                <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="review">Under Review</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Language</Label>
+              <Select value={editForm.language} onValueChange={v => setEditForm(f => ({ ...f, language: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="bn">বাংলা</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Replace File (optional)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.gif"
+                onChange={e => setReplacementFile(e.target.files?.[0] ?? null)}
+              />
+              {replacementFile && (
+                <p className="text-xs text-muted-foreground">New file: {replacementFile.name}</p>
+              )}
             </div>
           </div>
           <DialogFooter>

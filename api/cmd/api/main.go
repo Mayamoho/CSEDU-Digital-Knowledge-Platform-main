@@ -91,7 +91,7 @@ func main() {
 	projectsHandler := projects.NewHandler(pool)
 	notifyHandler := notify.NewHandler(pool)
 	reviewsHandler := reviews.NewHandler(pool)
-	rolesHandler := roles.NewHandler(pool)
+	rolesHandler := roles.NewHandler(pool, minio)
 
 	r := chi.NewRouter()
 
@@ -156,6 +156,8 @@ func main() {
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.Authenticate)
 				r.Get("/me", authHandler.Me)
+				r.Patch("/me", authHandler.UpdateProfile)
+				r.Post("/change-password", authHandler.ChangePassword)
 				r.Post("/logout", authHandler.Logout)
 			})
 		})
@@ -286,6 +288,7 @@ func main() {
 
 				// Role-upgrade request queue
 				r.Get("/role-requests", rolesHandler.ListAll)
+				r.Get("/role-requests/{id}/evidence", rolesHandler.GetEvidence)
 				r.Post("/role-requests/{id}/decide", rolesHandler.Decide)
 			})
 		})
@@ -294,6 +297,7 @@ func main() {
 		r.Route("/role-requests", func(r chi.Router) {
 			r.Use(middleware.Authenticate)
 			r.Post("/", rolesHandler.Create)
+			r.Post("/evidence", rolesHandler.UploadEvidence)
 			r.Get("/mine", rolesHandler.ListMine)
 		})
 

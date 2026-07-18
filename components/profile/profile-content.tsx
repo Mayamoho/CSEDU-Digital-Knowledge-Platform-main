@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { User, Mail, Calendar, Shield, BookOpen, FileText, FolderOpen, Clock } from "lucide-react";
 import { ROLE_DISPLAY_NAMES, type RoleTier } from "@/lib/types";
+import { EditProfileDialog } from "@/components/profile/edit-profile-dialog";
+import { ChangePasswordDialog } from "@/components/profile/change-password-dialog";
 
 export function ProfileContent() {
   const { user } = useAuth();
@@ -74,7 +76,13 @@ export function ProfileContent() {
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold">{user.name}</h2>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h2 className="text-2xl font-bold">{user.name}</h2>
+                <div className="flex gap-2">
+                  <EditProfileDialog />
+                  <ChangePasswordDialog />
+                </div>
+              </div>
               <div className="mt-2 space-y-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="h-4 w-4" />

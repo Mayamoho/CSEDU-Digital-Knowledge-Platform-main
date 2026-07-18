@@ -114,7 +114,7 @@ func (h *Handler) SubmitResearch(w http.ResponseWriter, r *http.Request) {
 		`SELECT item_id FROM media_items WHERE file_path = $1 AND created_by = $2`,
 		req.FilePath, userID,
 	).Scan(&itemID)
-	
+
 	if err != nil {
 		// If media_item doesn't exist, create it (fallback for direct API calls)
 		itemID = uuid.New().String()
@@ -693,15 +693,15 @@ func (h *Handler) UpdateResearch(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 
-	// Check ownership and get item_id
-	var itemID, createdBy string
+	// Check ownership and get item_id + current status
+	var itemID, createdBy, curStatus string
 	err = tx.QueryRow(ctx,
-		`SELECT rp.item_id, m.created_by 
+		`SELECT rp.item_id, m.created_by, m.status
 		 FROM research_papers rp
 		 JOIN media_items m ON m.item_id = rp.item_id
 		 WHERE rp.paper_id = $1`,
 		paperID,
-	).Scan(&itemID, &createdBy)
+	).Scan(&itemID, &createdBy, &curStatus)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "research paper not found")
 		return
@@ -710,6 +710,25 @@ func (h *Handler) UpdateResearch(w http.ResponseWriter, r *http.Request) {
 	if createdBy != userID {
 		writeError(w, http.StatusForbidden, "you can only update your own research papers")
 		return
+	}
+
+	// A published paper that is edited must re-enter the review cycle: demote it to
+	// draft and clear any prior review so the author submits it for review again.
+	// This also drops it from the public /research listing and the RAG assistant,
+	// both of which only surface status = 'published' items.
+	demoted := curStatus == "published"
+	if demoted {
+		if _, err = tx.Exec(ctx,
+			`UPDATE media_items SET status = 'draft' WHERE item_id = $1`, itemID); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update status")
+			return
+		}
+		if _, err = tx.Exec(ctx,
+			`UPDATE research_papers SET reviewer_id = NULL, review_notes = NULL, reviewed_at = NULL
+			 WHERE paper_id = $1`, paperID); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to reset review")
+			return
+		}
 	}
 
 	// Update media_items
@@ -749,8 +768,13 @@ func (h *Handler) UpdateResearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	msg := "research paper updated successfully"
+	if demoted {
+		msg = "changes saved — the paper moved back to draft; submit it for review to publish again"
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"message": "research paper updated successfully",
+		"message": msg,
+		"demoted": strconv.FormatBool(demoted),
 	})
 }
 

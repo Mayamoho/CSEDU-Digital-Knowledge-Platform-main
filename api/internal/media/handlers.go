@@ -641,11 +641,13 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title    *string  `json:"title"`
-		Abstract *string  `json:"abstract"`
-		Keywords []string `json:"keywords"`
-		Tags     []string `json:"tags"`
-		Language *string  `json:"language"`
+		Title      *string  `json:"title"`
+		Abstract   *string  `json:"abstract"`
+		Keywords   []string `json:"keywords"`
+		Tags       []string `json:"tags"`
+		Language   *string  `json:"language"`
+		AccessTier *string  `json:"access_tier"`
+		Status     *string  `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid body")
@@ -660,6 +662,36 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "could not update title")
+			return
+		}
+	}
+
+	// Update access tier if provided (validated against the allowed set).
+	if req.AccessTier != nil && *req.AccessTier != "" {
+		validTiers := map[string]bool{"public": true, "student": true, "researcher": true, "librarian": true, "restricted": true}
+		if !validTiers[*req.AccessTier] {
+			writeError(w, http.StatusBadRequest, "invalid access tier")
+			return
+		}
+		if _, err := h.db.Exec(r.Context(),
+			`UPDATE media_items SET access_tier = $1 WHERE item_id = $2`,
+			*req.AccessTier, id); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update access tier")
+			return
+		}
+	}
+
+	// Update publication status if provided (draft/review/published/archived).
+	if req.Status != nil && *req.Status != "" {
+		validStatuses := map[string]bool{"draft": true, "review": true, "published": true, "archived": true}
+		if !validStatuses[*req.Status] {
+			writeError(w, http.StatusBadRequest, "invalid status")
+			return
+		}
+		if _, err := h.db.Exec(r.Context(),
+			`UPDATE media_items SET status = $1 WHERE item_id = $2`,
+			*req.Status, id); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update status")
 			return
 		}
 	}

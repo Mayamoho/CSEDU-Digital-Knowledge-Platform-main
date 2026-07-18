@@ -17,6 +17,15 @@ export function RoleRequestQueue() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const viewEvidence = async (requestId: string) => {
+    try {
+      const url = await apiClient.getRoleEvidenceObjectUrl(requestId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open identity card");
+    }
+  };
+
   const load = async (status: RoleRequest["status"]) => {
     setLoading(true);
     try {
@@ -106,15 +115,25 @@ export function RoleRequestQueue() {
                   )}
                   {r.evidence_url && (
                     <p className="text-xs">
-                      <span className="font-medium text-foreground">Evidence:</span>{" "}
-                      <a
-                        href={r.evidence_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline break-all"
-                      >
-                        {r.evidence_url}
-                      </a>
+                      <span className="font-medium text-foreground">Identity card:</span>{" "}
+                      {r.evidence_url.startsWith("role-evidence/") ? (
+                        <button
+                          type="button"
+                          onClick={() => viewEvidence(r.request_id)}
+                          className="text-primary underline"
+                        >
+                          View uploaded ID
+                        </button>
+                      ) : (
+                        <a
+                          href={r.evidence_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline break-all"
+                        >
+                          {r.evidence_url}
+                        </a>
+                      )}
                     </p>
                   )}
                   {r.justification && (

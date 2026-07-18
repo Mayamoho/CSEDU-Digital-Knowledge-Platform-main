@@ -392,6 +392,22 @@ class APIClient {
     return this.request<User>('/auth/me');
   }
 
+  // Update the caller's own name/email.
+  async updateProfile(data: { name: string; email: string }): Promise<User> {
+    return this.request<User>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Change the caller's password (verifies the current one server-side).
+  async changePassword(data: { current_password: string; new_password: string }): Promise<{ message: string }> {
+    return this.request('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Library Catalog endpoints
   async getLibraryCatalog(params: SearchParams = {}): Promise<PaginatedResponse<LibraryCatalogItem>> {
     const searchParams = new URLSearchParams();
@@ -510,7 +526,7 @@ class APIClient {
     return response.json();
   }
 
-  async updateMediaMetadata(itemId: string, metadata: Partial<MediaMetadata> & { title?: string }): Promise<MediaMetadata> {
+  async updateMediaMetadata(itemId: string, metadata: Partial<MediaMetadata> & { title?: string; access_tier?: string; status?: string }): Promise<MediaMetadata> {
     return this.request<MediaMetadata>(`/media/${itemId}/metadata`, {
       method: 'PATCH',
       body: JSON.stringify(metadata),
@@ -603,6 +619,50 @@ class APIClient {
 
   async listMyRoleRequests(): Promise<{ data: RoleRequest[] }> {
     return this.request(`/role-requests/mine`);
+  }
+
+  // Upload an identity-card scan/photo (PDF/PNG/JPG/HEIC) for a role request.
+  // Returns the stored object key to submit as the request's evidence.
+  async uploadRoleEvidence(file: File): Promise<{ evidence_url: string }> {
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/role-requests/evidence`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(error.message || 'Upload failed');
+    }
+    return response.json();
+  }
+
+  // Admin: fetch a role request's uploaded identity card (auth required) and
+  // return an object URL to open/preview. Legacy external links come back as
+  // { url } JSON and are returned directly.
+  async getRoleEvidenceObjectUrl(requestId: string): Promise<string> {
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+    const response = await fetch(`${API_BASE_URL}/admin/role-requests/${requestId}/evidence`, { headers });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Could not load evidence' }));
+      throw new Error(error.message || 'Could not load evidence');
+    }
+    const contentType = response.headers.get('Content-Type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      return data.url as string;
+    }
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
   }
 
   // Admin: role-request queue

@@ -386,6 +386,107 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// PATCH /api/v1/auth/me — update the caller's own name/email.
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(ctxUserID).(string)
+
+	var req struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if !emailRE.MatchString(req.Email) || len(req.Email) > 254 {
+		writeError(w, http.StatusBadRequest, "invalid email address")
+		return
+	}
+
+	var u userResponse
+	err := h.db.QueryRow(r.Context(),
+		`UPDATE users SET name = $1, email = $2 WHERE user_id = $3
+		 RETURNING user_id, email, name, role_tier,
+		           to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		           to_char(last_login,  'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+		req.Name, req.Email, userID,
+	).Scan(&u.UserID, &u.Email, &u.Name, &u.RoleTier, &u.CreatedAt, &u.LastLogin)
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") {
+			writeError(w, http.StatusConflict, "that email is already in use")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not update profile")
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/change-password — verify the current password, set a new one.
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(ctxUserID).(string)
+
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+
+	var hash string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT password_hash FROM users WHERE user_id = $1`, userID,
+	).Scan(&hash); err != nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	// Accounts created via Google/magic-link have no local password.
+	if hash == "" {
+		writeError(w, http.StatusBadRequest, "this account has no password set — sign in with your provider")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.CurrentPassword)) != nil {
+		writeError(w, http.StatusForbidden, "current password is incorrect")
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if _, err := h.db.Exec(r.Context(),
+		`UPDATE users SET password_hash = $1 WHERE user_id = $2`, string(newHash), userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not change password")
+		return
+	}
+
+	// Revoke existing refresh tokens so other sessions must re-authenticate.
+	_, _ = h.db.Exec(r.Context(),
+		`UPDATE refresh_tokens SET revoked = true WHERE user_id = $1 AND revoked = false`, userID)
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password changed"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/logout
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -403,7 +504,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // contextKey avoids collisions in context values
 type contextKey string
 
-const ctxUserID   contextKey = "user_id"
+const ctxUserID contextKey = "user_id"
 const ctxRoleTier contextKey = "role_tier"
 
 // GetUserID extracts user_id from request context (set by middleware).
@@ -411,6 +512,7 @@ func GetUserID(r *http.Request) (string, bool) {
 	v, ok := r.Context().Value(ctxUserID).(string)
 	return v, ok
 }
+
 // GetRoleTier extracts role_tier from request context.
 func GetRoleTier(r *http.Request) (string, bool) {
 	v, ok := r.Context().Value(ctxRoleTier).(string)
@@ -418,5 +520,5 @@ func GetRoleTier(r *http.Request) (string, bool) {
 }
 
 // For middleware package use
-var CtxUserID   = ctxUserID
+var CtxUserID = ctxUserID
 var CtxRoleTier = ctxRoleTier

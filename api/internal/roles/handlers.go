@@ -8,20 +8,35 @@ package roles
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/mailer"
 	"github.com/csedu/platform/api/internal/notify"
+	"github.com/csedu/platform/api/internal/storage"
 )
 
-type Handler struct{ db *pgxpool.Pool }
+type Handler struct {
+	db    *pgxpool.Pool
+	minio *storage.MinioClient
+}
 
-func NewHandler(db *pgxpool.Pool) *Handler { return &Handler{db: db} }
+func NewHandler(db *pgxpool.Pool, minio *storage.MinioClient) *Handler {
+	return &Handler{db: db, minio: minio}
+}
+
+// evidencePrefix marks an evidence_url that is a stored object key (an uploaded
+// identity-card scan) rather than an external http(s) link.
+const evidencePrefix = "role-evidence/"
+
+const maxEvidenceSize = 15 << 20 // 15 MB — an ID card scan/photo is small.
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -74,8 +89,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "A university / registration ID is required for verification.")
 		return
 	}
-	if !strings.HasPrefix(req.EvidenceURL, "http://") && !strings.HasPrefix(req.EvidenceURL, "https://") {
-		writeError(w, http.StatusBadRequest, "Provide a public evidence link (university profile, ORCID, or department page) starting with http:// or https://.")
+	// Evidence is either an uploaded identity-card scan (a stored object key) or,
+	// for backward compatibility, a public http(s) link.
+	isStored := strings.HasPrefix(req.EvidenceURL, evidencePrefix)
+	isLink := strings.HasPrefix(req.EvidenceURL, "http://") || strings.HasPrefix(req.EvidenceURL, "https://")
+	if !isStored && !isLink {
+		writeError(w, http.StatusBadRequest, "Please attach a scan or photo of your identity card (PDF, PNG, JPG or HEIC).")
 		return
 	}
 
@@ -98,7 +117,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	title := "New role request"
 	body := fmt.Sprintf("%s requested the %s role.", applicantName, req.RequestedRole)
 	body += "\n\nUniversity/registration ID: " + req.UniversityID
-	body += "\nEvidence: " + req.EvidenceURL
+	if isStored {
+		body += "\nEvidence: identity card attached — view it in the admin role-request queue"
+	} else {
+		body += "\nEvidence: " + req.EvidenceURL
+	}
 	if req.Justification != "" {
 		body += "\n\nReason: " + req.Justification
 	}
@@ -108,6 +131,108 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{"request_id": requestID, "status": "pending"})
+}
+
+// POST /api/v1/role-requests/evidence — upload an identity-card scan/photo and
+// return the stored object key to submit as evidence_url. Authenticated users
+// only. Accepts PDF, PNG, JPG/JPEG and HEIC.
+func (h *Handler) UploadEvidence(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authpkg.GetUserID(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.minio == nil {
+		writeError(w, http.StatusInternalServerError, "file storage unavailable")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxEvidenceSize+1024)
+	if err := r.ParseMultipartForm(maxEvidenceSize); err != nil {
+		writeError(w, http.StatusRequestEntityTooLarge, "file too large (max 15 MB) or invalid form data")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "an identity-card file is required")
+		return
+	}
+	defer file.Close()
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+	allowed := map[string]bool{"pdf": true, "png": true, "jpg": true, "jpeg": true, "heic": true}
+	if !allowed[ext] {
+		writeError(w, http.StatusBadRequest, "identity card must be a PDF, PNG, JPG or HEIC file")
+		return
+	}
+
+	objectKey := fmt.Sprintf("%s%s/%s.%s", evidencePrefix, userID, uuid.New().String(), ext)
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	key, uploadErr := h.minio.Upload(r.Context(), objectKey, contentType, file, header.Size)
+	if uploadErr != nil {
+		writeError(w, http.StatusInternalServerError, "file storage failed")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"evidence_url": key})
+}
+
+// GET /api/v1/admin/role-requests/{id}/evidence — stream the uploaded identity
+// card for a request (admin only). For legacy http(s) evidence links it returns
+// the URL as JSON so the caller can open it.
+func (h *Handler) GetEvidence(w http.ResponseWriter, r *http.Request) {
+	requestID := chi.URLParam(r, "id")
+
+	var evidence string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT COALESCE(evidence_url, '') FROM role_requests WHERE request_id = $1`, requestID,
+	).Scan(&evidence); err != nil {
+		writeError(w, http.StatusNotFound, "request not found")
+		return
+	}
+	if evidence == "" {
+		writeError(w, http.StatusNotFound, "no evidence on file")
+		return
+	}
+	if !strings.HasPrefix(evidence, evidencePrefix) {
+		// Legacy external link.
+		writeJSON(w, http.StatusOK, map[string]string{"url": evidence})
+		return
+	}
+	if h.minio == nil {
+		writeError(w, http.StatusInternalServerError, "file storage unavailable")
+		return
+	}
+
+	obj, err := h.minio.GetObject(r.Context(), evidence)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not retrieve evidence")
+		return
+	}
+	defer obj.Close()
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(evidence), "."))
+	contentType := "application/octet-stream"
+	switch ext {
+	case "pdf":
+		contentType = "application/pdf"
+	case "png":
+		contentType = "image/png"
+	case "jpg", "jpeg":
+		contentType = "image/jpeg"
+	case "heic":
+		contentType = "image/heic"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `inline; filename="identity-card.`+ext+`"`)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	if _, err := io.Copy(w, obj); err != nil {
+		fmt.Printf("evidence stream error for %s: %v\n", requestID, err)
+	}
 }
 
 // GET /api/v1/role-requests/mine — the caller's own requests (newest first).
