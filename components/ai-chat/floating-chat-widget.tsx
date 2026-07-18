@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, X, Send, MessageCircle, Sparkles } from "lucide-react";
+import { Bot, X, Send, MessageCircle, Sparkles, BookOpen } from "lucide-react";
 import { apiClient, ChatResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -16,6 +17,7 @@ interface Message {
   role: "user" | "assistant";
   timestamp: Date;
   citations?: string[];
+  citationIds?: string[];
 }
 
 export function FloatingChatWidget() {
@@ -43,6 +45,7 @@ export function FloatingChatWidget() {
         role: "assistant" as const,
         timestamp: new Date(msg.timestamp),
         citations: msg.source_ids || [],
+        citationIds: msg.source_ids || [],
       }));
       
       // Add user messages (simplified - in production would store user queries too)
@@ -99,12 +102,13 @@ export function FloatingChatWidget() {
         role: "assistant",
         timestamp: new Date(),
         citations: response.sources ? response.sources.map(source => source.title) : [],
+        citationIds: response.sources ? response.sources.map(source => source.item_id) : [],
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Failed to send chat message:", error);
-      
+
       let errorMessage = "Sorry, I encountered an error while processing your request. Please try again.";
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch')) {
@@ -124,6 +128,7 @@ export function FloatingChatWidget() {
       };
 
       setMessages((prev) => [...prev, errorResponse]);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -189,13 +194,25 @@ export function FloatingChatWidget() {
                     <Bot className="h-8 w-8 mx-auto mb-2 text-primary" />
                     <p className="text-sm">Ask me anything about CSEDU resources!</p>
                     <div className="mt-3 flex flex-wrap gap-1 justify-center">
-                      <Badge variant="outline" className="text-xs cursor-pointer hover:bg-muted">
+                      <Badge
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => setInput("Research papers")}
+                      >
                         Research papers
                       </Badge>
-                      <Badge variant="outline" className="text-xs cursor-pointer hover:bg-muted">
+                      <Badge
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => setInput("Library books")}
+                      >
                         Library books
                       </Badge>
-                      <Badge variant="outline" className="text-xs cursor-pointer hover:bg-muted">
+                      <Badge
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => setInput("Student projects")}
+                      >
                         Student projects
                       </Badge>
                     </div>
@@ -225,11 +242,30 @@ export function FloatingChatWidget() {
                         
                         {message.citations && message.citations.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
-                            {message.citations.map((citation, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {citation}
-                              </Badge>
-                            ))}
+                            {message.citations.map((citation, index) => {
+                              const id = message.citationIds?.[index] || "";
+                              const isUuid = /^[0-9a-f-]{36}$/.test(id);
+                              if (isUuid) {
+                                return (
+                                  <a
+                                    key={index}
+                                    href={`/archive/${id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20 transition-colors"
+                                    title="Open source document"
+                                  >
+                                    <BookOpen className="h-3 w-3" />
+                                    {citation || "Source"}
+                                  </a>
+                                );
+                              }
+                              return (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {citation}
+                                </Badge>
+                              );
+                            })}
                           </div>
                         )}
                         

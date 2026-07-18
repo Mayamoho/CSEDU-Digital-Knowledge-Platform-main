@@ -72,7 +72,7 @@ function ResearchGridInner() {
               <Skeleton className="h-4 w-3/4" />
             </CardHeader>
             <CardContent><Skeleton className="h-4 w-full mb-2" /><Skeleton className="h-4 w-2/3" /></CardContent>
-            <CardFooter><Skeleton className="h-9 w-full" /></CardFooter>
+            <CardFooter><Skeleton className="h-9 w-full animate-pulse" style={{ animationDelay: `${i * 80}ms` }} /></CardFooter>
           </Card>
         ))}
       </div>
@@ -96,7 +96,7 @@ function ResearchGridInner() {
       <p className="text-sm text-muted-foreground">Showing {papers.length} of {total} papers</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {papers.map((paper) => (
-          <Card key={paper.paper_id} className="flex flex-col">
+          <Card key={paper.paper_id} className="group flex flex-col transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 hover:border-primary/30">
             <CardHeader className="flex-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -154,7 +154,7 @@ export function ResearchGrid() {
     <Suspense fallback={
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-64 animate-pulse bg-muted rounded" />
+          <div key={i} className="h-64 animate-pulse bg-muted rounded transition-all" style={{ animationDelay: `${i * 80}ms` }} />
         ))}
       </div>
     }>

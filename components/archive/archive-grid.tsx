@@ -102,7 +102,7 @@ function ArchiveGridInner() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i}>
+            <Card key={i} className="group transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5">
               <CardHeader className="space-y-2">
                 <Skeleton className="h-5 w-full" />
                 <Skeleton className="h-4 w-3/4" />
@@ -112,7 +112,7 @@ function ArchiveGridInner() {
                 <Skeleton className="h-4 w-2/3" />
               </CardContent>
               <CardFooter>
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full animate-pulse" style={{ animationDelay: `${i * 80}ms` }} />
               </CardFooter>
             </Card>
           ))}
@@ -147,7 +147,7 @@ function ArchiveGridInner() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
-          <Card key={item.item_id} className="flex flex-col overflow-hidden">
+          <Card key={item.item_id} className="group flex flex-col overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 hover:border-primary/30">
             <CardHeader className="flex-1">
               <ArchiveThumbnail item={item} />
               <div className="flex items-start justify-between gap-2">
@@ -244,7 +244,7 @@ export function ArchiveGrid() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-64 animate-pulse bg-muted rounded" />
+          <div key={i} className="h-64 animate-pulse bg-muted rounded transition-all" style={{ animationDelay: `${i * 80}ms` }} />
         ))}
       </div>
     </div>}>

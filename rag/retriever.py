@@ -50,11 +50,22 @@ class HybridRetriever:
     # thing top-k chunk retrieval is structurally bad at: it returns the k most similar
     # chunks, never the whole set, so the model confidently counts whatever it was handed.
     # These queries get an exact, complete inventory instead.
+    # Only genuine enumeration phrases belong here. Generic words that also appear
+    # in specific/content questions ("which paper on X", "is Y available", "do you
+    # have Z") must NOT be here — they force a full corpus dump that crowds out the
+    # semantically-relevant chunk the user actually wanted.
     _INVENTORY_INTENT = [
-        "how many", "how much", "number of", "count", "total", "list", "list all",
-        "list the", "all the", "show all", "show me", "every", "inventory",
-        "what are", "which", "do you have", "any ", "available", "what books",
-        "what research", "what papers", "what projects",
+        "how many", "how much", "number of", "count", "total",
+        "list all", "list the", "list of", "show all", "show me all",
+        "all the", "every ", "inventory", "complete list", "full list",
+        "what books", "what research", "what papers", "what projects",
+        "কয়টি", "কতটি", "কতগুলো", "তালিকা", "সব",
+    ]
+    # When the query names no resource type, only dump the whole corpus if it is
+    # clearly a corpus-wide enumeration — never for a generic content question.
+    _CORPUS_WIDE_INTENT = [
+        "resource", "everything", "platform", "how many", "how much",
+        "number of", "count", "total", "inventory", "list all",
         "কয়টি", "কতটি", "কতগুলো", "তালিকা", "সব",
     ]
     _TYPE_KEYWORDS = {
@@ -72,7 +83,12 @@ class HybridRetriever:
 
         wanted = [t for t, kws in self._TYPE_KEYWORDS.items() if any(k in q for k in kws)]
         if not wanted:
-            wanted = list(self._TYPE_KEYWORDS)  # "how many resources do you have?"
+            # No type named — only enumerate the entire corpus for an explicit
+            # corpus-wide ask ("how many resources do you have?"), otherwise let
+            # normal semantic retrieval answer the content question.
+            if not any(kw in q for kw in self._CORPUS_WIDE_INTENT):
+                return []
+            wanted = list(self._TYPE_KEYWORDS)
 
         out: List[Dict] = []
         if "book" in wanted:

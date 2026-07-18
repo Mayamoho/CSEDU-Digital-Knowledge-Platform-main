@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Library } from "lucide-react";
 
 import { CatalogBrowser } from "@/components/catalog/catalog-browser";
 import { LibrarianCatalogTools } from "@/components/catalog/librarian-catalog-tools";
+import { ModuleHero } from "@/components/module-hero";
 
 export const metadata: Metadata = {
   title: "Library Catalog",
@@ -21,14 +23,11 @@ function CatalogLoading() {
 export default function CatalogPage() {
   return (
     <div className="container px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Library Catalog
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Browse and search our collection of books, journals, and academic resources.
-        </p>
-      </div>
+      <ModuleHero
+        title="Library Catalog"
+        description="Browse and search our collection of books, journals, and academic resources."
+        icon={<Library className="h-6 w-6" />}
+      />
 
       <div className="flex flex-col gap-6">
         <Suspense fallback={<CatalogLoading />}>
