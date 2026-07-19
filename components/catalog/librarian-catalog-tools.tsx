@@ -108,7 +108,7 @@ export function LibrarianCatalogTools() {
   };
 
   return (
-    <RoleGate allowedRoles={['librarian', 'administrator']}>
+    <RoleGate allowedRoles={['librarian', 'administrator']} hideIfUnauthorized>
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
