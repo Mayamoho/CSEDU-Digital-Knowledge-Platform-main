@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function UploadPage() {
   return (
-    <AuthGuard requireAuth allowedRoles={['staff', 'admin', 'ai_admin']}>
+    <AuthGuard requireAuth allowedRoles={['student', 'researcher', 'librarian', 'administrator']}>
       <UploadPageClient />
     </AuthGuard>
   );

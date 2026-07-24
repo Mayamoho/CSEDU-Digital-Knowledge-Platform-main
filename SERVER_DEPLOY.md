@@ -52,9 +52,13 @@ Internet ──► Azure NSG (allows 8080-8090)
 From your laptop:
 
 ```bash
-ssh azureuser@20.195.127.226
-# password: bMe2@6XgqvYNV8$wzQh7fL#s
+ssh azureuser@<VM_IP>
 ```
+
+> **Credentials are never stored in this repository.** The VM host, user and
+> password (or SSH key) live in the team password manager and in the GitHub
+> Actions secrets `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `VM_APP_DIR`. If you need
+> access, ask a maintainer.
 
 ### 2.2 Install Docker Engine + Compose plugin
 
@@ -71,7 +75,7 @@ chmod +x install-docker.sh
 
 ```bash
 exit                                  # close SSH session
-ssh azureuser@20.195.127.226          # log in again
+ssh azureuser@<VM_IP>                 # log in again
 docker ps                             # should work without sudo
 ```
 
@@ -195,14 +199,19 @@ docker compose -f docker-compose.prod.yml down -v
 
 ## 6. Default logins (change immediately!)
 
+The seed data in `infra/db/init.sql` creates four accounts:
+
 ```
-Admin       : admin@cs.du.ac.bd        / Admin@12345
-Librarian   : librarian@cs.du.ac.bd    / Librarian@12345
-Researcher  : researcher@cs.du.ac.bd   / Research@12345
-Student     : student@cs.du.ac.bd      / Student@12345
+Admin       : admin@cs.du.ac.bd
+Librarian   : librarian@cs.du.ac.bd
+Researcher  : researcher@cs.du.ac.bd
+Student     : student@cs.du.ac.bd
 ```
 
-Log in and rotate every password from the admin panel.
+Their initial passwords are the bcrypt hashes committed in `init.sql` and are
+**documentation/demo credentials only**. Rotate all four from the admin panel
+immediately after the first deployment, and share the live values through the
+team password manager — never through this repository.
 
 ---
 

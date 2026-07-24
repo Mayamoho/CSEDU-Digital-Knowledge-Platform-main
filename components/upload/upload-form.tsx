@@ -45,7 +45,8 @@ interface UploadFormProps {
 
 interface UploadedFile {
   file: File;
-  preview: string;
+  /** Object URL for image previews; undefined for non-image formats. */
+  preview?: string;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB

@@ -25,22 +25,22 @@ const roleConfig: Record<
     variant: "outline",
     className: "text-muted-foreground border-muted-foreground/30",
   },
-  member: {
+  student: {
     icon: Shield,
     variant: "outline",
     className: "text-primary border-primary/30 bg-primary/5",
   },
-  staff: {
+  researcher: {
     icon: ShieldCheck,
     variant: "secondary",
     className: "text-accent-foreground bg-accent/80",
   },
-  admin: {
+  librarian: {
     icon: ShieldAlert,
     variant: "default",
     className: "bg-primary text-primary-foreground",
   },
-  ai_admin: {
+  administrator: {
     icon: Bot,
     variant: "default",
     className: "bg-gradient-to-r from-primary to-accent text-primary-foreground",

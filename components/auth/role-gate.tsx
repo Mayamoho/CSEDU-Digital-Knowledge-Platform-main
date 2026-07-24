@@ -143,9 +143,12 @@ export function useRoleCheck() {
     return canAccessContent(user.role_tier, accessTier);
   };
 
-  const isAdmin = user?.role_tier === "admin" || user?.role_tier === "ai_admin";
-  const isStaff = user?.role_tier === "staff" || isAdmin;
-  const isMember = user?.role_tier === "member" || isStaff;
+  // Role names follow the role_tier enum in infra/db/init.sql:
+  // public < student < researcher < librarian < administrator.
+  const isAdmin = user?.role_tier === "administrator";
+  const isStaff = user?.role_tier === "librarian" || isAdmin;
+  const isMember =
+    user?.role_tier === "student" || user?.role_tier === "researcher" || isStaff;
 
   return {
     user,

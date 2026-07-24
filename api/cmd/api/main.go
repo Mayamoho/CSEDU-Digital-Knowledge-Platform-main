@@ -135,6 +135,14 @@ func main() {
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 
+		// Versioned health probe. The root /health above is only reachable from
+		// inside the Docker network; nginx proxies /api/v1/ only, so external
+		// monitoring (and the Postman collection) needs this one.
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"ok","service":"csedu-api","version":"v1"}`))
+		})
+
 		// ── Auth (public) ─────────────────────────────────────────────────
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", authHandler.Register)

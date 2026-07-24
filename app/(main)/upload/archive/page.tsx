@@ -24,7 +24,7 @@ export default function UploadArchivePage() {
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <UploadForm
-              defaultAccessTier="staff"
+              defaultAccessTier="librarian"
               allowedFormats={['pdf', 'docx', 'doc', 'jpg', 'png']}
               title="Upload Archive Materials"
               description="Upload historical documents, departmental records, and archival materials."
