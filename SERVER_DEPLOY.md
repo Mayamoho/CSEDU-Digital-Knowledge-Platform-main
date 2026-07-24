@@ -199,19 +199,19 @@ docker compose -f docker-compose.prod.yml down -v
 
 ## 6. Default logins (change immediately!)
 
-The seed data in `infra/db/init.sql` creates four accounts:
+The seed data in `infra/db/init.sql` creates four demo accounts, one per role.
+These are **evaluation credentials for a demo deployment** — rotate them from the
+admin panel before the platform holds anything real, and share live values
+through the team password manager rather than this repository.
 
-```
-Admin       : admin@cs.du.ac.bd
-Librarian   : librarian@cs.du.ac.bd
-Researcher  : researcher@cs.du.ac.bd
-Student     : student@cs.du.ac.bd
-```
+| Role | Email | Password |
+|---|---|---|
+| Administrator | admin@cs.du.ac.bd | `Admin@12345` |
+| Librarian | librarian@cs.du.ac.bd | `Librarian@12345` |
+| Researcher | researcher@cs.du.ac.bd | `Research@12345` |
+| Student | student@cs.du.ac.bd | `Student@12345` |
 
-Their initial passwords are the bcrypt hashes committed in `init.sql` and are
-**documentation/demo credentials only**. Rotate all four from the admin panel
-immediately after the first deployment, and share the live values through the
-team password manager — never through this repository.
+Five failed sign-ins lock an account for 15 minutes.
 
 ---
 

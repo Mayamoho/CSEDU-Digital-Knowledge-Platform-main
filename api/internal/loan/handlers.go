@@ -3,6 +3,7 @@ package loan
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -120,10 +121,12 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	dueDate := time.Now().Add(20 * time.Hour) // 20 hour loan period
 
 	if err := tx.QueryRow(r.Context(),
+		// RETURNING must list exactly what Scan consumes: pgx rejects the whole
+		// query when the counts differ, which made every checkout through this
+		// handler fail with a 500.
 		`INSERT INTO loans (user_id, catalog_id, checkout_date, due_date, status)
 		 VALUES ($1, $2, NOW(), $3, 'active')
-		 RETURNING loan_id, to_char(checkout_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 
-		          to_char(due_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+		 RETURNING loan_id`,
 		userID, req.CatalogID, dueDate,
 	).Scan(&loanID); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not create loan")
@@ -240,8 +243,14 @@ func (h *Handler) GetMyLoans(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * perPage
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT l.loan_id, l.checkout_date, l.due_date, l.return_date, l.status,
-		        lc.title, lc.author, lc.isbn, lc.format
+		// pgx cannot scan timestamptz into a Go string, so the dates are
+		// formatted in SQL. Without this every row failed to scan and the
+		// endpoint returned an empty list to a member who had loans.
+		`SELECT l.loan_id,
+		        to_char(l.checkout_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        to_char(l.due_date,      'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        to_char(l.return_date,   'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		        l.status, lc.title, lc.author, COALESCE(lc.isbn, '')
 		 FROM loans l
 		 JOIN library_catalog lc ON l.catalog_id = lc.catalog_id
 		 WHERE l.user_id = $1
@@ -260,8 +269,10 @@ func (h *Handler) GetMyLoans(w http.ResponseWriter, r *http.Request) {
 		var loan loanResponse
 		var returnDate *string
 		err := rows.Scan(&loan.LoanID, &loan.CheckoutDate, &loan.DueDate, &returnDate, &loan.Status,
-			&loan.Title, &loan.Author, &loan.ISBN, nil)
+			&loan.Title, &loan.Author, &loan.ISBN)
 		if err != nil {
+			// Silently skipping rows here is what hid the scan bug above.
+			log.Printf("loans: skipping unreadable row for user %s: %v", userID, err)
 			continue
 		}
 		loan.ReturnDate = returnDate

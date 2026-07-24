@@ -314,12 +314,12 @@ INSERT INTO users (user_id, email, name, password_hash, role_tier) VALUES (
     'administrator'
 );
 
--- Librarian  (password: Staff@12345)
+-- Librarian  (password: Librarian@12345)
 INSERT INTO users (user_id, email, name, password_hash, role_tier) VALUES (
     'b0000000-0000-0000-0000-000000000002',
     'librarian@cs.du.ac.bd',
     'Head Librarian',
-    '$2a$12$p9V8CIW/ztTCdyzaEGdAYuUIEqXB.PaxIGnRyPm2U/tttHVdFVIA.',
+    '$2a$12$luNb230ekbsGQiOvivKn1OnHmDvrqcXRgkR4K0e4Yk11u0HR7NPNW',
     'librarian'
 );
 
@@ -328,7 +328,7 @@ INSERT INTO users (user_id, email, name, password_hash, role_tier) VALUES (
     'c0000000-0000-0000-0000-000000000003',
     'researcher@cs.du.ac.bd',
     'Faculty Researcher',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYxK5Z8Z9W.',
+    '$2a$12$D/hDxh9j6cbGHYtyN81kleqAi/LKxzcMpqxXcce0qZEiTowpWryqC',
     'researcher'
 );
 
@@ -337,7 +337,7 @@ INSERT INTO users (user_id, email, name, password_hash, role_tier) VALUES (
     'd0000000-0000-0000-0000-000000000004',
     'student@cs.du.ac.bd',
     'Student User',
-    '$2a$12$ZK5qL9v8rN7mP6xK1J2qXuYzN8tMQJqhN8/LewY5GyYxK5Z8Z9Wa',
+    '$2a$12$UvMNZ8qAmXE19uYkuN41FOUztBsPc5U3WKPH0zv6OS61P5jkNi2EG',
     'student'
 );
 
