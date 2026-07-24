@@ -1,0 +1,2168 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{longtable}
+
+% Define colors
+\definecolor{primarycolor}{RGB}{0,102,204}
+\definecolor{secondarycolor}{RGB}{51,51,51}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{CSEDU Digital Knowledge Platform}
+\fancyhead[R]{User Manual}
+\fancyfoot[C]{\thepage}
+
+% Title formatting
+\titleformat{\section}{\Large\bfseries\color{primarycolor}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{secondarycolor}}{\thesubsection}{1em}{}
+
+% Hyperlink colors
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primarycolor,
+    urlcolor=primarycolor,
+    citecolor=primarycolor
+}
+
+\title{\textbf{\Huge CSEDU Digital Knowledge Platform}\\
+\vspace{0.5cm}
+\Large Comprehensive User Manual}
+\author{Department of Computer Science and Engineering\\
+University of Dhaka}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+\subsection{Overview}
+The CSEDU Digital Knowledge Platform is a comprehensive web-based system designed to facilitate knowledge sharing, research collaboration, and library management within the Computer Science and Engineering Department at the University of Dhaka. The platform integrates multiple services including a digital library, research repository, student project showcase, multimedia archives, and AI-powered assistance.
+
+\subsection{Key Features}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Digital Library Management} - Browse, borrow, and return books with automated fine calculations
+    \item \textbf{Research Repository} - Submit, review, and publish academic research papers
+    \item \textbf{Project Showcase} - Display and archive student projects with team collaborations
+    \item \textbf{Digital Archives} - Store and access historical documents, multimedia content
+    \item \textbf{AI Assistant} - Intelligent search and document summarization using RAG technology
+    \item \textbf{Role-Based Access Control} - Five-tier permission system ensuring appropriate access
+    \item \textbf{Notification System} - Email and in-app notifications for important events
+\end{itemize}
+
+\subsection{User Roles}
+The platform supports five distinct user roles, each with specific permissions:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Public (Unauthenticated)} - View published content only
+    \item \textbf{Student} - Default role with basic borrowing and upload permissions
+    \item \textbf{Researcher} - Enhanced access to submit and review research papers
+    \item \textbf{Librarian} - Manage library catalog, approve content, process loans
+    \item \textbf{Administrator} - Full platform management and user role administration
+\end{enumerate}
+
+\subsection{Accessing the Platform}
+\begin{tcolorbox}[colback=blue!5!white,colframe=primarycolor,title=Platform Access]
+\textbf{URL:} \url{http://20.195.127.226:8080}\\
+\textbf{Support:} For assistance, contact the CSE Department IT support team.
+\end{tcolorbox}
+
+\subsection{System Requirements}
+\begin{itemize}[leftmargin=*]
+    \item Modern web browser (Chrome, Firefox, Safari, Edge - latest versions)
+    \item Internet connection
+    \item Recommended screen resolution: 1366x768 or higher
+    \item JavaScript enabled
+\end{itemize}
+
+\newpage
+
+\section{Getting Started}
+
+\subsection{Creating an Account}
+
+\subsubsection{Registration Process}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to the platform homepage
+    \item Click on the \textbf{"Sign Up"} or \textbf{"Register"} button
+    \item Fill in the registration form:
+        \begin{itemize}
+            \item \textbf{Full Name:} Your complete name as per university records
+            \item \textbf{Email Address:} A valid email address (preferably institutional email)
+            \item \textbf{Password:} Minimum 8 characters, include uppercase, lowercase, numbers, and special characters
+            \item \textbf{Confirm Password:} Re-enter your password
+        \end{itemize}
+    \item Click \textbf{"Create Account"}
+    \item Check your email for a confirmation message
+    \item Your account is created with \textbf{Student} role by default
+\end{enumerate}
+
+\begin{tcolorbox}[colback=yellow!10!white,colframe=orange,title=Important Note]
+All new registrations are assigned the \textbf{Student} role automatically. To request elevated permissions (Researcher or Librarian), use the Role Request feature after logging in.
+\end{tcolorbox}
+
+\subsection{Logging In}
+\begin{enumerate}[leftmargin=*]
+    \item Click the \textbf{"Login"} button on the homepage
+    \item Enter your registered email address
+    \item Enter your password
+    \item Click \textbf{"Sign In"}
+    \item You will be redirected to your personalized dashboard
+\end{enumerate}
+
+\subsection{Password Recovery}
+If you forget your password:
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Forgot Password?"} on the login page
+    \item Enter your registered email address
+    \item Check your email for a password reset link
+    \item Click the link (valid for 1 hour)
+    \item Create a new password (minimum 8 characters)
+    \item Confirm your new password
+    \item Click \textbf{"Reset Password"}
+    \item Log in with your new credentials
+\end{enumerate}
+
+\subsection{Profile Management}
+
+\subsubsection{Viewing Your Profile}
+\begin{enumerate}[leftmargin=*]
+    \item Click on your name/avatar in the top-right corner
+    \item Select \textbf{"Profile"} from the dropdown menu
+    \item View your profile information:
+        \begin{itemize}
+            \item Name, Email, Role
+            \item Registration date
+            \item Last login time
+            \item Account statistics (uploads, loans, etc.)
+        \end{itemize}
+\end{enumerate}
+
+\subsubsection{Editing Your Profile}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to your profile page
+    \item Click the \textbf{"Edit Profile"} button
+    \item Update your information (Name, Email)
+    \item Click \textbf{"Save Changes"}
+    \item Confirmation message will appear
+\end{enumerate}
+
+\subsubsection{Changing Your Password}
+\begin{enumerate}[leftmargin=*]
+    \item Go to \textbf{Settings} or \textbf{Profile}
+    \item Click \textbf{"Change Password"}
+    \item Enter your current password
+    \item Enter your new password (minimum 8 characters)
+    \item Confirm your new password
+    \item Click \textbf{"Update Password"}
+    \item You will be logged out and prompted to log in again
+\end{enumerate}
+
+\newpage
+
+\section{Library Catalog System}
+
+\subsection{Browsing the Catalog}
+The library catalog is accessible to all users, including non-authenticated visitors.
+
+\subsubsection{Accessing the Catalog}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Library"} or \textbf{"Catalog"} in the main navigation menu
+    \item The catalog page displays all available books in a grid or list view
+    \item Each book card shows:
+        \begin{itemize}
+            \item Book title and author
+            \item Cover image (if available)
+            \item Availability status (Available/Borrowed)
+            \item Format (Book, E-book, etc.)
+            \item Year of publication
+        \end{itemize}
+\end{enumerate}
+
+\subsubsection{Searching for Books}
+\begin{enumerate}[leftmargin=*]
+    \item Use the search bar at the top of the catalog page
+    \item Enter keywords from:
+        \begin{itemize}
+            \item Book title
+            \item Author name
+            \item ISBN number
+            \item Topic/subject area
+        \end{itemize}
+    \item Press Enter or click the search icon
+    \item Results are displayed with relevance ranking
+\end{enumerate}
+
+\subsubsection{Filtering Books}
+You can narrow down catalog results using multiple filters:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Topic:} Filter by subject area (e.g., Algorithms, Machine Learning, Databases, Programming)
+    \item \textbf{Availability:} Show only available or borrowed books
+    \item \textbf{Format:} Book, E-book, Reference
+    \item \textbf{Year:} Publication year range
+\end{itemize}
+
+\subsection{Borrowing Books (Student, Researcher, Librarian, Administrator)}
+
+\subsubsection{How to Borrow}
+\begin{enumerate}[leftmargin=*]
+    \item Log in to your account
+    \item Navigate to the library catalog
+    \item Find the book you want to borrow (must show "Available")
+    \item Click on the book to view details
+    \item Click the \textbf{"Borrow"} button
+    \item Confirm the borrowing action
+    \item A success message appears with the due date
+    \item The book is now listed in \textbf{"My Loans"}
+\end{enumerate}
+
+\subsubsection{Loan Period and Limits}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Loan Duration:} 14 days from the checkout date
+    \item \textbf{Due Date:} Displayed in your loans list
+    \item \textbf{Late Returns:} Subject to fines (50 BDT per day, max 500 BDT per loan)
+    \item \textbf{Fine Block:} If outstanding fines exceed 50 BDT, borrowing is disabled until payment
+\end{itemize}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red,title=Borrowing Restrictions]
+\begin{itemize}[leftmargin=*]
+    \item You cannot borrow the same book twice simultaneously
+    \item Librarians cannot borrow books (monitoring role only)
+    \item Borrowing is disabled if you have overdue fines exceeding 50 BDT
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Viewing Your Loans}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"My Loans"} in the navigation menu
+    \item See all your current and past loans
+    \item For each loan, view:
+        \begin{itemize}
+            \item Book title
+            \item Checkout date
+            \item Due date
+            \item Return date (if returned)
+            \item Status (Active, Returned, Overdue)
+        \end{itemize}
+    \item Active loans show a \textbf{"Return"} button
+\end{enumerate}
+
+\subsection{Returning Books}
+\begin{enumerate}[leftmargin=*]
+    \item Go to \textbf{"My Loans"}
+    \item Find the book you want to return
+    \item Click the \textbf{"Return Book"} button
+    \item Confirm the return
+    \item If the book is overdue, a fine will be automatically calculated
+    \item The book status changes to "Returned"
+    \item Book availability is updated in the catalog
+\end{enumerate}
+
+\newpage
+
+\subsection{Reservations (Holds) System}
+
+\subsubsection{Placing a Hold}
+When all copies of a book are borrowed, you can place a hold to be notified when it becomes available.
+
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to the book detail page
+    \item If all copies are borrowed, a \textbf{"Place Hold"} button appears
+    \item Click \textbf{"Place Hold"}
+    \item Your hold request is recorded with a timestamp
+    \item You'll receive an email notification when the book becomes available
+    \item The hold is valid for 48 hours after notification
+\end{enumerate}
+
+\subsubsection{Viewing Your Holds}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"My Loans"} or \textbf{"Holds"} in the navigation
+    \item View all your active reservations
+    \item See your position in the queue
+    \item Status indicators:
+        \begin{itemize}
+            \item \textbf{Active:} Waiting for book availability
+            \item \textbf{Fulfilled:} Book is now available for you
+            \item \textbf{Cancelled:} You or staff cancelled the hold
+        \end{itemize}
+\end{enumerate}
+
+\subsubsection{Cancelling a Hold}
+\begin{enumerate}[leftmargin=*]
+    \item Go to your holds list
+    \item Find the hold you want to cancel
+    \item Click the \textbf{"Cancel Hold"} button
+    \item Confirm cancellation
+    \item The hold is removed from your list
+\end{enumerate}
+
+\subsection{Fine Management}
+
+\subsubsection{Viewing Your Fines (Student, Researcher)}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Fines"} in the navigation menu
+    \item See all your fines with details:
+        \begin{itemize}
+            \item Book title
+            \item Fine amount (BDT)
+            \item Status (Pending, Paid, Waived)
+            \item Calculation date
+        \end{itemize}
+    \item Total unpaid fines are displayed at the top
+\end{enumerate}
+
+\subsubsection{Fine Calculation}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Rate:} 50 BDT per day overdue
+    \item \textbf{Maximum:} 500 BDT per loan
+    \item \textbf{Calculation:} Automatic on the day after due date
+    \item \textbf{Grace Period:} None - fines start immediately after the due date
+\end{itemize}
+
+\subsubsection{Paying Fines}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Fines"} page
+    \item Find the pending fine you want to pay
+    \item Click \textbf{"Pay Fine"}
+    \item Select payment method (if configured)
+    \item Confirm payment
+    \item Fine status changes to "Paid"
+    \item If total fines were blocking borrowing, the block is lifted
+\end{enumerate}
+
+\begin{tcolorbox}[colback=yellow!10!white,colframe=orange,title=Payment Note]
+Contact the library desk or administrator for payment procedures. The system records payment confirmations entered by library staff.
+\end{tcolorbox}
+
+\newpage
+
+\section{Digital Archives}
+
+\subsection{Overview}
+The Digital Archives section stores historical documents, multimedia content, and departmental resources accessible to all users.
+
+\subsection{Browsing Archives}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Archives"} in the main navigation
+    \item Browse through categories or search
+    \item Each archive item displays:
+        \begin{itemize}
+            \item Title
+            \item Description/Abstract
+            \item Upload date
+            \item Format (PDF, Video, Image, Document, etc.)
+            \item Access tier (Public, Student, Researcher, Restricted)
+        \end{itemize}
+    \item Click on an item to view full details
+\end{enumerate}
+
+\subsection{Uploading to Archives (Student, Researcher, Librarian, Administrator)}
+
+\subsubsection{Supported File Types}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Documents:} PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS
+    \item \textbf{Images:} JPG, JPEG, PNG, GIF
+    \item \textbf{Videos:} MP4
+    \item \textbf{Audio:} MP3
+    \item \textbf{Archives:} ZIP
+    \item \textbf{External Links:} URLs (YouTube videos, web resources)
+    \item \textbf{Maximum File Size:} 50 MB per file
+\end{itemize}
+
+\subsubsection{Upload Process}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Upload"} in the navigation
+    \item Select \textbf{"Archive"} as the upload type
+    \item Fill in the form:
+        \begin{itemize}
+            \item \textbf{Title:} Descriptive title (required)
+            \item \textbf{Abstract:} Brief description of the content
+            \item \textbf{Keywords:} Comma-separated tags for searchability
+            \item \textbf{Tags:} Additional categorization tags
+            \item \textbf{Language:} Content language (default: English)
+            \item \textbf{Access Tier:} Choose who can view (Public, Student, Researcher, Restricted)
+            \item \textbf{Status:} Draft (save for later) or Published (make available immediately)
+        \end{itemize}
+    \item Choose file source:
+        \begin{itemize}
+            \item Upload a file from your computer, OR
+            \item Provide an external URL (for YouTube videos, web resources)
+        \end{itemize}
+    \item Click \textbf{"Upload"}
+    \item Wait for processing confirmation
+    \item Your upload appears in \textbf{"My Uploads"}
+\end{enumerate}
+
+\subsection{Viewing Archive Details}
+\begin{enumerate}[leftmargin=*]
+    \item Click on any archive item
+    \item View complete details:
+        \begin{itemize}
+            \item Title, abstract, keywords
+            \item Uploader name and date
+            \item File format and size
+            \item Access permissions
+        \end{itemize}
+    \item Options available:
+        \begin{itemize}
+            \item \textbf{Download:} Save file to your device
+            \item \textbf{View Online:} Preview (for PDFs, images, videos)
+            \item \textbf{Share:} Copy link to share with others
+        \end{itemize}
+\end{enumerate}
+
+\subsection{Downloading Archive Files}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to the archive item detail page
+    \item Click the \textbf{"Download"} button
+    \item The file downloads to your default download folder
+    \item For external links, you're redirected to the external resource
+\end{enumerate}
+
+\subsection{Managing Your Uploads}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"My Uploads"} in the navigation
+    \item View all your uploaded content (Archives, Research, Projects)
+    \item For each item:
+        \begin{itemize}
+            \item View status (Draft, Review, Published, Archived)
+            \item Edit metadata (title, abstract, keywords)
+            \item Delete drafts
+            \item Submit for review/publication
+        \end{itemize}
+    \item Click \textbf{"Edit"} to update metadata
+    \item Click \textbf{"Delete"} to remove draft items (published items require admin approval)
+\end{enumerate}
+
+\newpage
+
+\section{Research Paper Management}
+
+\subsection{Overview (Researcher, Librarian, Administrator Only)}
+The Research section allows researchers to submit, review, and publish academic papers, facilitating knowledge sharing and collaboration.
+
+\subsection{Browsing Research Papers (All Users)}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Research"} in the navigation menu
+    \item Browse published research papers
+    \item Use search and filters:
+        \begin{itemize}
+            \item Search by title, author, keywords
+            \item Filter by publication year
+            \item Filter by research area/topic
+        \end{itemize}
+    \item Each paper displays:
+        \begin{itemize}
+            \item Title and authors
+            \item Publication date
+            \item Abstract preview
+            \item DOI (if available)
+            \item Download option
+        \end{itemize}
+\end{enumerate}
+
+\subsection{Submitting Research Papers (Researcher, Administrator)}
+
+\subsubsection{Preparing Your Submission}
+Before submitting, ensure you have:
+\begin{itemize}[leftmargin=*]
+    \item Final version of your paper (PDF format, max 50 MB)
+    \item Complete list of authors with affiliations
+    \item Abstract (required)
+    \item Keywords (5-10 recommended)
+    \item DOI, journal/conference details (if published)
+\end{itemize}
+
+\subsubsection{Submission Process}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Upload"} then select \textbf{"Research Paper"}
+    \item Fill in the submission form:
+        \begin{itemize}
+            \item \textbf{Title:} Full paper title (required)
+            \item \textbf{Authors:} Enter all authors' names (comma-separated)
+            \item \textbf{Co-authors:} Additional contributors
+            \item \textbf{Abstract:} Concise summary of your research (required)
+            \item \textbf{Keywords:} Key terms for discoverability
+            \item \textbf{DOI:} Digital Object Identifier (if available)
+            \item \textbf{Journal/Conference:} Publication venue
+            \item \textbf{Publication Date:} When published (if applicable)
+            \item \textbf{Access Tier:} Choose visibility (Public, Student, Researcher)
+        \end{itemize}
+    \item Upload your PDF file
+    \item Choose initial status:
+        \begin{itemize}
+            \item \textbf{Draft:} Save for later editing
+            \item \textbf{Submit for Review:} Send to reviewers immediately
+        \end{itemize}
+    \item Click \textbf{"Submit Research Paper"}
+    \item Confirmation message appears
+    \item Your submission is listed in \textbf{"My Uploads"}
+\end{enumerate}
+
+\subsection{Paper Review Workflow}
+
+\subsubsection{Submission Statuses}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Draft:} Author is still editing
+    \item \textbf{Under Review:} Assigned to reviewer for evaluation
+    \item \textbf{Published:} Approved and publicly available
+    \item \textbf{Archived:} Withdrawn or removed from active display
+\end{enumerate}
+
+\subsubsection{Submitting for Review}
+\begin{enumerate}[leftmargin=*]
+    \item Go to \textbf{"My Uploads"}
+    \item Find your draft paper
+    \item Click \textbf{"Submit for Review"}
+    \item Confirm submission
+    \item Status changes to "Under Review"
+    \item Librarian/Administrator assigns a reviewer
+    \item You'll be notified when review is complete
+\end{enumerate}
+
+\subsubsection{Receiving Feedback}
+\begin{enumerate}[leftmargin=*]
+    \item Check your notifications or email
+    \item Navigate to your paper in \textbf{"My Uploads"}
+    \item Click to view review comments
+    \item Review notes include:
+        \begin{itemize}
+            \item Reviewer feedback
+            \item Suggestions for improvement
+            \item Publication decision
+        \end{itemize}
+    \item If revisions requested:
+        \begin{itemize}
+            \item Make necessary changes
+            \item Re-upload revised version
+            \item Resubmit for review
+        \end{itemize}
+\end{enumerate}
+
+\newpage
+
+\subsection{Viewing Published Papers}
+\begin{enumerate}[leftmargin=*]
+    \item Click on any published paper
+    \item View full details:
+        \begin{itemize}
+            \item Complete abstract
+            \item Author information
+            \item Publication details (journal, DOI, date)
+            \item Full-text PDF
+        \end{itemize}
+    \item Download the PDF
+    \item Cite the paper (citation format provided)
+    \item Use AI to generate summary
+\end{enumerate}
+
+\subsection{Editing Your Papers}
+\begin{enumerate}[leftmargin=*]
+    \item Go to \textbf{"My Uploads"}
+    \item Find the paper you want to edit
+    \item Click \textbf{"Edit"}
+    \item Update metadata (title, abstract, keywords, etc.)
+    \item Replace PDF file if needed
+    \item Save changes
+    \item If already published, changes may require admin approval
+\end{enumerate}
+
+\section{Student Projects}
+
+\subsection{Overview (Student, Researcher, Administrator)}
+The Projects section showcases student team projects, providing a portfolio of academic and personal work.
+
+\subsection{Browsing Projects (All Users)}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Projects"} in the navigation
+    \item Browse the project gallery
+    \item Filter by:
+        \begin{itemize}
+            \item Academic year
+            \item Course code
+            \item Project type
+        \end{itemize}
+    \item Each project card shows:
+        \begin{itemize}
+            \item Project title
+            \item Team members
+            \item Supervisor
+            \item Academic year
+            \item Brief description
+        \end{itemize}
+\end{enumerate}
+
+\subsection{Submitting a Project (Student, Researcher, Administrator)}
+
+\subsubsection{Before Submission}
+Prepare the following:
+\begin{itemize}[leftmargin=*]
+    \item Project title
+    \item Team member names (all contributors)
+    \item Supervisor name (optional)
+    \item Course code and academic year
+    \item Project abstract/description
+    \item Keywords
+    \item Project deliverables:
+        \begin{itemize}
+            \item Documentation (PDF, DOCX)
+            \item Source code (ZIP archive)
+            \item Demo video (MP4 or YouTube link)
+            \item Web URL (if applicable)
+            \item GitHub repository link
+            \item APK file (for Android apps)
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{Submission Steps}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Upload"} then select \textbf{"Project"}
+    \item Fill in project details:
+        \begin{itemize}
+            \item \textbf{Title:} Project name (required)
+            \item \textbf{Team Members:} All member names (comma-separated, required)
+            \item \textbf{Supervisor:} Faculty supervisor (select from list)
+            \item \textbf{Academic Year:} Year of completion (e.g., 2024, required)
+            \item \textbf{Course Code:} Related course (e.g., CSE400)
+            \item \textbf{Abstract:} Project summary (required)
+            \item \textbf{Keywords:} Tags for searchability
+        \end{itemize}
+    \item Add project resources:
+        \begin{itemize}
+            \item Upload project file (PDF, ZIP, APK)
+            \item Web URL (for live demo)
+            \item GitHub repository link
+            \item App download link
+        \end{itemize}
+    \item Choose status:
+        \begin{itemize}
+            \item \textbf{Draft:} Save for later
+            \item \textbf{Submit for Approval:} Send to librarian/admin
+        \end{itemize}
+    \item Click \textbf{"Submit Project"}
+    \item Your project appears in \textbf{"My Uploads"} with status "Review"
+\end{enumerate}
+
+\newpage
+
+\subsection{Project Approval Process}
+\begin{enumerate}[leftmargin=*]
+    \item After submission, librarian/administrator reviews your project
+    \item Review criteria:
+        \begin{itemize}
+            \item Completeness of information
+            \item Appropriate content
+            \item Working links and files
+        \end{itemize}
+    \item Project status changes:
+        \begin{itemize}
+            \item \textbf{Approved → Published:} Visible in gallery
+            \item \textbf{Rejected → Draft:} Returned with feedback
+        \end{itemize}
+    \item You receive email notification of the decision
+    \item If rejected, make requested changes and resubmit
+\end{enumerate}
+
+\subsection{Viewing Project Details}
+\begin{enumerate}[leftmargin=*]
+    \item Click on any project in the gallery
+    \item View complete information:
+        \begin{itemize}
+            \item Full description and abstract
+            \item Team member list
+            \item Supervisor information
+            \item Academic year and course
+            \item Keywords and tags
+        \end{itemize}
+    \item Access project resources:
+        \begin{itemize}
+            \item Download documentation
+            \item Visit web demo
+            \item View source code on GitHub
+            \item Download APK (for apps)
+        \end{itemize}
+\end{enumerate}
+
+\section{AI-Powered Features}
+
+\subsection{AI Chat Assistant (Student, Researcher, Librarian, Administrator)}
+
+\subsubsection{Overview}
+The AI Chat Assistant uses Retrieval-Augmented Generation (RAG) technology to answer questions by searching through all indexed documents in the platform (research papers, archives, projects).
+
+\subsubsection{Accessing the AI Chat}
+\begin{enumerate}[leftmargin=*]
+    \item Click the \textbf{AI Chat icon} (usually in bottom-right corner)
+    \item Or navigate to \textbf{"AI Assistant"} in the menu
+    \item The chat interface opens with a welcome message
+\end{enumerate}
+
+\subsubsection{Asking Questions}
+\begin{enumerate}[leftmargin=*]
+    \item Type your question in the chat input box
+    \item Questions can be in:
+        \begin{itemize}
+            \item English
+            \item Bengali
+            \item Other supported languages (auto-detected)
+        \end{itemize}
+    \item Example questions:
+        \begin{itemize}
+            \item "What research papers discuss machine learning algorithms?"
+            \item "Summarize projects related to Android development"
+            \item "Find documents about computer networking"
+            \item "কম্পিউটার সায়েন্স সম্পর্কে কি আছে?" (Bengali)
+        \end{itemize}
+    \item Press Enter or click the Send button
+    \item Wait for the AI to process (usually 2-5 seconds)
+\end{enumerate}
+
+\subsubsection{Understanding AI Responses}
+AI responses include:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Answer:} Generated response based on indexed documents
+    \item \textbf{Source Citations:} Links to documents used to generate the answer
+    \item \textbf{Model Used:} Which AI model processed your query (Groq/Gemini)
+    \item \textbf{Detected Language:} The language of your question
+    \item \textbf{Response Time:} How long it took to generate
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=primarycolor,title=AI Capabilities]
+\begin{itemize}[leftmargin=*]
+    \item Searches across all published content you have access to
+    \item Respects access control (won't show restricted content)
+    \item Provides cited sources for transparency
+    \item Remembers context within a conversation session
+    \item Can rephrase questions for better results
+\end{itemize}
+\end{tcolorbox}
+
+\newpage
+
+\subsubsection{Viewing Source Documents}
+\begin{enumerate}[leftmargin=*]
+    \item Click on any citation link in the AI response
+    \item You're taken to the source document details page
+    \item Read the full document or download it
+    \item Return to chat to continue conversation
+\end{enumerate}
+
+\subsubsection{Chat History}
+\begin{enumerate}[leftmargin=*]
+    \item Each chat creates a session
+    \item View past conversations by clicking \textbf{"Chat History"}
+    \item Select a previous session to continue that conversation
+    \item Chat sessions are saved indefinitely
+    \item Start a new session by clicking \textbf{"New Chat"}
+\end{enumerate}
+
+\subsection{Document Summarization}
+
+\subsubsection{Generating Summaries}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to any research paper or document
+    \item Click the \textbf{"Summarize"} button
+    \item Select summary options:
+        \begin{itemize}
+            \item Language (English, Bengali, etc.)
+            \item Model (Groq or Gemini)
+            \item Length (Short, Medium, Long)
+        \end{itemize}
+    \item Click \textbf{"Generate Summary"}
+    \item Wait for processing (10-30 seconds depending on document length)
+    \item Read the AI-generated summary
+    \item Copy or share the summary
+\end{enumerate}
+
+\begin{tcolorbox}[colback=yellow!10!white,colframe=orange,title=Summary Features]
+\begin{itemize}[leftmargin=*]
+    \item Extracts key points from long documents
+    \item Maintains technical accuracy
+    \item Available in multiple languages
+    \item Saves time on literature review
+\end{itemize}
+\end{tcolorbox}
+
+\section{Role Request System}
+
+\subsection{Requesting a Role Upgrade (Student, Researcher)}
+
+\subsubsection{When to Request}
+Users can request role upgrades when they need additional permissions:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Student → Researcher:} To submit and review research papers
+    \item \textbf{Student/Researcher → Librarian:} To manage library catalog and approve content
+\end{itemize}
+
+\textbf{Note:} Administrator role cannot be self-requested and must be assigned by existing administrators.
+
+\subsubsection{Submitting a Request}
+\begin{enumerate}[leftmargin=*]
+    \item Click on your profile icon
+    \item Select \textbf{"Request Role Upgrade"}
+    \item Or navigate to \textbf{"/role-request"}
+    \item Fill in the request form:
+        \begin{itemize}
+            \item \textbf{Desired Role:} Select Researcher or Librarian
+            \item \textbf{Justification:} Explain why you need this role (required)
+            \item Example justifications:
+                \begin{itemize}
+                    \item "I am a PhD student in the CSE department (ID: 2021-XX-XXX) and need to submit research papers"
+                    \item "I am a faculty member and want to help manage the library catalog"
+                    \item "I am working as a research assistant under Prof. X"
+                \end{itemize}
+        \end{itemize}
+    \item Click \textbf{"Submit Request"}
+    \item All administrators receive email notifications
+    \item Your request status appears on the page
+\end{enumerate}
+
+\subsubsection{Request Status}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Pending:} Waiting for administrator review (you cannot submit another request while one is pending)
+    \item \textbf{Approved:} Your role has been upgraded - log out and back in to see new permissions
+    \item \textbf{Declined:} Request was not approved - see administrator notes for reason
+\end{itemize}
+
+\newpage
+
+\subsubsection{Viewing Your Request History}
+\begin{enumerate}[leftmargin=*]
+    \item Go to the role request page
+    \item Scroll down to see \textbf{"Your Requests"} section
+    \item View all past requests with:
+        \begin{itemize}
+            \item Requested role
+            \item Submission date
+            \item Status (Pending, Approved, Declined)
+            \item Your justification
+            \item Administrator decision notes (if available)
+        \end{itemize}
+\end{enumerate}
+
+\section{Notifications}
+
+\subsection{In-App Notifications}
+
+\subsubsection{Accessing Notifications}
+\begin{enumerate}[leftmargin=*]
+    \item Look for the \textbf{bell icon} in the top navigation bar
+    \item Red badge shows number of unread notifications
+    \item Click the bell to open notification dropdown
+    \item See recent notifications with:
+        \begin{itemize}
+            \item Notification title
+            \item Brief message
+            \item Timestamp
+            \item Read/unread status
+        \end{itemize}
+\end{enumerate}
+
+\subsubsection{Notification Types}
+You receive notifications for:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Role Requests:}
+        \begin{itemize}
+            \item Your request was approved/declined
+            \item (Admins) New role request submitted
+        \end{itemize}
+    \item \textbf{Library:}
+        \begin{itemize}
+            \item Book hold is now available for pickup
+            \item Loan due date approaching
+            \item Overdue book reminder
+        \end{itemize}
+    \item \textbf{Research:}
+        \begin{itemize}
+            \item Paper review completed
+            \item Paper published
+        \end{itemize}
+    \item \textbf{Projects:}
+        \begin{itemize}
+            \item Project approved/rejected
+        \end{itemize}
+    \item \textbf{System:}
+        \begin{itemize}
+            \item Platform updates
+            \item Maintenance announcements
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{Managing Notifications}
+\begin{enumerate}[leftmargin=*]
+    \item Click on any notification to:
+        \begin{itemize}
+            \item Mark it as read
+            \item Navigate to related page
+        \end{itemize}
+    \item Click \textbf{"Mark all as read"} to clear all unread notifications
+    \item Click \textbf{"View All"} to see complete notification history
+\end{enumerate}
+
+\subsection{Email Notifications}
+All in-app notifications are also sent to your registered email address. Configure email preferences in Settings.
+
+\newpage
+
+\section{Librarian Features}
+
+\subsection{Overview (Librarian, Administrator Only)}
+Librarians have additional permissions to manage the library catalog, process loans, handle fines, and approve content submissions.
+
+\subsection{Managing Library Catalog}
+
+\subsubsection{Adding Individual Books}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Library"} → \textbf{"Catalog"}
+    \item Click \textbf{"Add Book"} button
+    \item Fill in book details:
+        \begin{itemize}
+            \item \textbf{Title:} Full book title (required)
+            \item \textbf{Author:} Author name(s) (required)
+            \item \textbf{ISBN:} ISBN-10 or ISBN-13 (optional but recommended)
+            \item \textbf{Topic:} Subject area (auto-detected from title or manually selected)
+            \item \textbf{Format:} Book, E-book, Reference
+            \item \textbf{Year:} Publication year
+            \item \textbf{Publisher:} Publishing company
+            \item \textbf{Total Copies:} Number of copies available
+            \item \textbf{Location:} Physical shelf location
+            \item \textbf{Cover Image:} Upload book cover (optional)
+        \end{itemize}
+    \item Click \textbf{"Add Book"}
+    \item Book is immediately added to the catalog
+    \item Available copies = Total copies initially
+\end{enumerate}
+
+\subsubsection{Bulk Import from CSV}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Catalog Management"}
+    \item Click \textbf{"Import CSV"}
+    \item Download the CSV template
+    \item Fill in the template with book data
+    \item CSV columns:
+        \begin{itemize}
+            \item title, author, isbn, topic, format
+            \item year, publisher, total\_copies, location
+        \end{itemize}
+    \item Upload your completed CSV file
+    \item Click \textbf{"Import"}
+    \item System processes the file:
+        \begin{itemize}
+            \item Existing books (matched by ISBN) are updated
+            \item New books are created
+        \end{itemize}
+    \item View import summary (successes, errors, duplicates)
+\end{enumerate}
+
+\subsubsection{Exporting Catalog}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Catalog Management"}
+    \item Click \textbf{"Export Catalog"}
+    \item Select export format (CSV)
+    \item Choose filters (optional):
+        \begin{itemize}
+            \item By topic
+            \item By availability
+            \item By format
+        \end{itemize}
+    \item Click \textbf{"Export"}
+    \item CSV file downloads to your device
+    \item Use for backup, analysis, or sharing
+\end{enumerate}
+
+\subsection{Managing Loans and Returns}
+
+\subsubsection{Viewing All Loans}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Library"} → \textbf{"All Loans"}
+    \item See complete loan list with:
+        \begin{itemize}
+            \item Borrower name and email
+            \item Book title
+            \item Checkout date
+            \item Due date
+            \item Status (Active, Returned, Overdue)
+        \end{itemize}
+    \item Filter by status:
+        \begin{itemize}
+            \item Active loans
+            \item Overdue loans
+            \item Returned loans
+        \end{itemize}
+    \item Sort by due date, checkout date, or borrower name
+\end{enumerate}
+
+\subsubsection{Processing Returns}
+\begin{enumerate}[leftmargin=*]
+    \item In the All Loans list, find the loan to process
+    \item Click \textbf{"Process Return"}
+    \item Confirm the return
+    \item System automatically:
+        \begin{itemize}
+            \item Marks loan as returned
+            \item Calculates fines if overdue
+            \item Updates book availability
+            \item Notifies next user in hold queue (if any)
+        \end{itemize}
+\end{enumerate}
+
+\newpage
+
+\subsection{Fine Management}
+
+\subsubsection{Viewing All Fines}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Library"} → \textbf{"All Fines"}
+    \item View complete fine list showing:
+        \begin{itemize}
+            \item Borrower name and email
+            \item Book title
+            \item Fine amount (BDT)
+            \item Status (Pending, Paid, Waived)
+            \item Calculation date
+        \end{itemize}
+    \item See total unpaid fines at the top
+    \item Filter by status
+    \item Search by borrower name
+\end{enumerate}
+
+\subsubsection{Recording Fine Payments}
+\begin{enumerate}[leftmargin=*]
+    \item Find the fine in the All Fines list
+    \item Click \textbf{"Record Payment"}
+    \item Confirm payment details:
+        \begin{itemize}
+            \item Amount paid
+            \item Payment method
+            \item Reference number (if applicable)
+        \end{itemize}
+    \item Click \textbf{"Confirm"}
+    \item Fine status changes to "Paid"
+    \item Borrower is notified
+\end{enumerate}
+
+\subsubsection{Waiving Fines}
+\begin{enumerate}[leftmargin=*]
+    \item Find the fine to waive
+    \item Click \textbf{"Waive Fine"}
+    \item Enter waiver reason (required):
+        \begin{itemize}
+            \item "First-time offence"
+            \item "System error"
+            \item "Special circumstances"
+            \item Other explanation
+        \end{itemize}
+    \item Click \textbf{"Waive"}
+    \item Fine status changes to "Waived"
+    \item Action is logged in audit trail
+    \item Borrower is notified
+\end{enumerate}
+
+\subsection{Content Approval}
+
+\subsubsection{Reviewing Submitted Content}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Content Review Queue"}
+    \item See all items pending approval:
+        \begin{itemize}
+            \item Research papers awaiting review
+            \item Student projects for approval
+            \item Archive items for publishing
+        \end{itemize}
+    \item Click on any item to view details
+    \item Review content for:
+        \begin{itemize}
+            \item Appropriate content
+            \item Complete metadata
+            \item Proper formatting
+            \item Working files/links
+        \end{itemize}
+\end{enumerate}
+
+\subsubsection{Approving/Rejecting Content}
+\begin{enumerate}[leftmargin=*]
+    \item After reviewing, choose action:
+    \item \textbf{To Approve:}
+        \begin{itemize}
+            \item Click \textbf{"Approve"} or \textbf{"Publish"}
+            \item Add approval notes (optional)
+            \item Confirm
+            \item Content becomes publicly visible
+            \item Uploader is notified
+        \end{itemize}
+    \item \textbf{To Reject:}
+        \begin{itemize}
+            \item Click \textbf{"Reject"} or \textbf{"Request Changes"}
+            \item Enter reason for rejection (required)
+            \item Suggest improvements
+            \item Confirm
+            \item Content returns to draft status
+            \item Uploader is notified with your feedback
+        \end{itemize}
+\end{enumerate}
+
+\newpage
+
+\section{Administrator Features}
+
+\subsection{Overview (Administrator Only)}
+Administrators have full platform control, including user management, role assignment, and system configuration.
+
+\subsection{User Management}
+
+\subsubsection{Viewing All Users}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Users"}
+    \item See complete user list with pagination
+    \item For each user, view:
+        \begin{itemize}
+            \item Name and email
+            \item Current role
+            \item Registration date
+            \item Last login time
+        \end{itemize}
+    \item Search users by name or email
+    \item Filter by role
+\end{enumerate}
+
+\subsubsection{Changing User Roles}
+\begin{enumerate}[leftmargin=*]
+    \item Find the user in the user list
+    \item Click on their row to expand details
+    \item Click \textbf{"Change Role"}
+    \item Select new role:
+        \begin{itemize}
+            \item Student
+            \item Researcher
+            \item Librarian
+            \item Administrator
+        \end{itemize}
+    \item Add reason for change (recorded in audit log)
+    \item Click \textbf{"Confirm"}
+    \item User is notified of role change
+    \item Change is logged in audit trail
+\end{enumerate}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red,title=Role Change Restrictions]
+\begin{itemize}[leftmargin=*]
+    \item You cannot change your own role (prevents accidental self-demotion)
+    \item Administrator role should be granted carefully
+    \item Role downgrades may remove user's access to content they uploaded
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Role Request Management}
+
+\subsubsection{Viewing Pending Requests}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Role Requests"}
+    \item See queue of pending requests
+    \item For each request, view:
+        \begin{itemize}
+            \item Applicant name and email
+            \item Current role
+            \item Requested role
+            \item Justification provided
+            \item Submission date
+        \end{itemize}
+    \item Sort by date (oldest first recommended)
+\end{enumerate}
+
+\subsubsection{Approving Requests}
+\begin{enumerate}[leftmargin=*]
+    \item Click on a request to view full details
+    \item Review the justification
+    \item Verify applicant credentials (if needed)
+    \item Click \textbf{"Approve"}
+    \item Add approval notes (optional)
+    \item Confirm approval
+    \item System immediately:
+        \begin{itemize}
+            \item Updates user's role
+            \item Sends email notification to user
+            \item Creates audit log entry
+            \item Marks request as "Approved"
+        \end{itemize}
+    \item User must log out and back in to see new permissions
+\end{enumerate}
+
+\subsubsection{Declining Requests}
+\begin{enumerate}[leftmargin=*]
+    \item Click on the request
+    \item Click \textbf{"Decline"}
+    \item Enter reason for decline (required):
+        \begin{itemize}
+            \item "Insufficient justification"
+            \item "Role not appropriate for user"
+            \item "Additional information needed"
+            \item Other specific reason
+        \end{itemize}
+    \item Click \textbf{"Confirm"}
+    \item User receives email with your reason
+    \item Request is marked as "Declined"
+    \item User can submit a new request with updated justification
+\end{enumerate}
+
+\newpage
+
+\subsection{Audit Log}
+
+\subsubsection{Viewing the Audit Trail}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to \textbf{"Admin"} → \textbf{"Audit Log"}
+    \item See chronological list of all administrative actions
+    \item Each entry shows:
+        \begin{itemize}
+            \item Actor (admin who performed action)
+            \item Action type (e.g., "role\_change", "fine\_waived")
+            \item Resource type (user, book, fine, etc.)
+            \item Resource ID
+            \item Timestamp
+            \item Additional details
+        \end{itemize}
+    \item Filter by:
+        \begin{itemize}
+            \item Actor (specific admin)
+            \item Action type
+            \item Date range
+            \item Resource type
+        \end{itemize}
+    \item Search by resource ID
+\end{enumerate}
+
+\subsubsection{Audit Log Actions Tracked}
+\begin{itemize}[leftmargin=*]
+    \item User role changes
+    \item Fine waivers
+    \item Role request approvals/declines
+    \item Content status changes (publish, archive)
+    \item Catalog imports
+    \item User account modifications
+    \item System configuration changes
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=primarycolor,title=Audit Log Purpose]
+The audit log provides:
+\begin{itemize}[leftmargin=*]
+    \item Accountability for administrative actions
+    \item Security and compliance monitoring
+    \item Troubleshooting support
+    \item Historical record of platform changes
+    \item Immutable, append-only log
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{System Configuration}
+
+\subsubsection{Platform Settings}
+Administrators can configure:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Library Settings:}
+        \begin{itemize}
+            \item Default loan period (currently 14 days)
+            \item Fine rate (currently 50 BDT/day)
+            \item Maximum fine per loan (currently 500 BDT)
+            \item Fine block threshold (currently 50 BDT)
+        \end{itemize}
+    \item \textbf{Upload Settings:}
+        \begin{itemize}
+            \item Maximum file size (currently 50 MB)
+            \item Allowed file types
+            \item Default access tiers
+        \end{itemize}
+    \item \textbf{AI Settings:}
+        \begin{itemize}
+            \item Preferred AI model
+            \item Query limits
+            \item Language preferences
+        \end{itemize}
+    \item \textbf{Email Notifications:}
+        \begin{itemize}
+            \item SMTP configuration
+            \item Email templates
+            \item Notification preferences
+        \end{itemize}
+\end{itemize}
+
+\textbf{Note:} System configuration changes require environment variable updates and may require platform restart.
+
+\newpage
+
+\section{Search and Discovery}
+
+\subsection{Global Search}
+\begin{enumerate}[leftmargin=*]
+    \item Use the search bar in the top navigation
+    \item Enter keywords
+    \item Search across:
+        \begin{itemize}
+            \item Library catalog (titles, authors, ISBN)
+            \item Research papers (titles, abstracts, authors)
+            \item Student projects (titles, descriptions, team members)
+            \item Digital archives (titles, content, keywords)
+        \end{itemize}
+    \item Results are grouped by type
+    \item Filter results by:
+        \begin{itemize}
+            \item Content type
+            \item Date range
+            \item Access tier
+        \end{itemize}
+\end{enumerate}
+
+\subsection{Advanced Search}
+\begin{enumerate}[leftmargin=*]
+    \item Click \textbf{"Advanced Search"}
+    \item Set multiple criteria:
+        \begin{itemize}
+            \item Exact phrase matching
+            \item Author/creator name
+            \item Date range
+            \item Specific fields (title, abstract, keywords)
+            \item Boolean operators (AND, OR, NOT)
+        \end{itemize}
+    \item Select content types to search
+    \item Click \textbf{"Search"}
+    \item Refine results with faceted filters
+\end{enumerate}
+
+\subsection{Browsing by Category}
+\begin{enumerate}[leftmargin=*]
+    \item Navigate to specific sections:
+        \begin{itemize}
+            \item \textbf{Library:} Browse by topic, format, or year
+            \item \textbf{Research:} Browse by research area or year
+            \item \textbf{Projects:} Browse by academic year or course
+            \item \textbf{Archives:} Browse by collection or media type
+        \end{itemize}
+    \item Use hierarchical filters to narrow results
+    \item View item counts for each category
+\end{enumerate}
+
+\section{Mobile Access}
+
+\subsection{Responsive Design}
+The platform is fully responsive and optimized for mobile devices:
+\begin{itemize}[leftmargin=*]
+    \item Adaptive layout for phones and tablets
+    \item Touch-optimized interface
+    \item Mobile-friendly navigation menu
+    \item Optimized file uploads
+    \item Full feature parity with desktop
+\end{itemize}
+
+\subsection{Mobile Browser Recommendations}
+\begin{itemize}[leftmargin=*]
+    \item Chrome for Android (latest version)
+    \item Safari for iOS (latest version)
+    \item Firefox Mobile (latest version)
+\end{itemize}
+
+\subsection{Mobile-Specific Features}
+\begin{itemize}[leftmargin=*]
+    \item Camera integration for document scanning
+    \item Location-based library search
+    \item Offline content caching (when implemented)
+    \item Push notifications (when implemented)
+\end{itemize}
+
+\newpage
+
+\section{Troubleshooting and FAQs}
+
+\subsection{Common Issues and Solutions}
+
+\subsubsection{Login Problems}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Forgot password:}
+        \begin{itemize}
+            \item Click "Forgot Password?" on login page
+            \item Check email for reset link (check spam folder)
+            \item Reset link expires in 1 hour
+        \end{itemize}
+    \item \textbf{Account locked after failed attempts:}
+        \begin{itemize}
+            \item After 5 failed login attempts, account is locked for 15 minutes
+            \item Wait for the lockout period to expire
+            \item Or use password reset to unlock immediately
+        \end{itemize}
+    \item \textbf{Email not registered:}
+        \begin{itemize}
+            \item Verify you're using the correct email
+            \item Create a new account if needed
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{Upload Issues}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{File too large:}
+        \begin{itemize}
+            \item Maximum file size is 50 MB
+            \item Compress PDF files or videos before uploading
+            \item Consider using external links for large videos
+        \end{itemize}
+    \item \textbf{Unsupported file type:}
+        \begin{itemize}
+            \item Check supported formats list
+            \item Convert file to supported format
+        \end{itemize}
+    \item \textbf{Upload timeout:}
+        \begin{itemize}
+            \item Check your internet connection
+            \item Try uploading during off-peak hours
+            \item Upload smaller files
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{Borrowing Issues}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Cannot borrow (button disabled):}
+        \begin{itemize}
+            \item Check if you have outstanding fines exceeding 50 BDT
+            \item Verify all copies aren't already borrowed
+            \item Ensure you're logged in
+            \item Librarians cannot borrow books
+        \end{itemize}
+    \item \textbf{Book not available:}
+        \begin{itemize}
+            \item Place a hold to be notified when available
+            \item Check estimated return date
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{Search Not Working}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{No results found:}
+        \begin{itemize}
+            \item Check spelling of search terms
+            \item Try broader keywords
+            \item Remove filters
+            \item Use advanced search for more control
+        \end{itemize}
+    \item \textbf{Incomplete results:}
+        \begin{itemize}
+            \item Ensure you have permission to view restricted content
+            \item Check if content is published (not draft)
+        \end{itemize}
+\end{itemize}
+
+\subsubsection{AI Chat Issues}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{AI not responding:}
+        \begin{itemize}
+            \item Wait up to 30 seconds for response
+            \item Check your internet connection
+            \item Try rephrasing your question
+            \item Start a new chat session
+        \end{itemize}
+    \item \textbf{Irrelevant answers:}
+        \begin{itemize}
+            \item Be more specific in your question
+            \item Include context or keywords
+            \item Try asking in a different language
+        \end{itemize}
+\end{itemize}
+
+\newpage
+
+\subsection{Frequently Asked Questions}
+
+\subsubsection{General}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Q: Can I use the platform without an account?}\\
+    A: Yes, you can browse published content (library catalog, research papers, projects) without logging in. However, borrowing books, uploading content, and using AI features require an account.
+    
+    \item \textbf{Q: How do I get elevated permissions (Researcher/Librarian)?}\\
+    A: Use the Role Request feature from your profile. Provide a clear justification. An administrator will review and approve/decline your request.
+    
+    \item \textbf{Q: Can I delete my uploaded content?}\\
+    A: You can delete draft items. Published content requires administrator approval for deletion to maintain platform integrity.
+    
+    \item \textbf{Q: How long does content review take?}\\
+    A: Review times vary depending on administrator availability. Typically 1-5 business days. You'll receive email notification when review is complete.
+\end{enumerate}
+
+\subsubsection{Library}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Q: How many books can I borrow at once?}\\
+    A: There is no hard limit on simultaneous loans, but you must not have overdue fines exceeding 50 BDT.
+    
+    \item \textbf{Q: Can I renew a loan?}\\
+    A: Currently, the system does not support automatic renewals. Return the book and re-borrow if available, or contact a librarian for assistance.
+    
+    \item \textbf{Q: What if I lose a borrowed book?}\\
+    A: Contact the library immediately. Replacement cost will be assessed by the librarian.
+    
+    \item \textbf{Q: Can fines be waived?}\\
+    A: Librarians and administrators can waive fines on a case-by-case basis with proper justification.
+\end{enumerate}
+
+\subsubsection{Research and Projects}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Q: Who can submit research papers?}\\
+    A: Only users with Researcher, Librarian, or Administrator roles can submit research papers.
+    
+    \item \textbf{Q: Can I edit my research paper after submission?}\\
+    A: You can edit papers in draft status. After submission for review or publication, contact an administrator for changes.
+    
+    \item \textbf{Q: Can multiple students collaborate on a project?}\\
+    A: Yes, list all team members in the project submission. The submitter becomes the primary contact.
+    
+    \item \textbf{Q: How do I add a supervisor to my project?}\\
+    A: Select the supervisor from the user list during project submission. The supervisor must already have an account.
+\end{enumerate}
+
+\subsubsection{AI Features}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Q: What content does the AI search?}\\
+    A: The AI searches all published content you have permission to access, including research papers, projects, archives, and library catalog descriptions.
+    
+    \item \textbf{Q: Can I trust AI responses?}\\
+    A: AI responses are based on indexed documents. Always verify critical information by checking the cited sources. Use AI as a starting point, not the final authority.
+    
+    \item \textbf{Q: What languages does the AI support?}\\
+    A: The AI supports English and Bengali, with auto-detection. Additional languages may be available depending on configuration.
+    
+    \item \textbf{Q: Are my chat conversations private?}\\
+    A: Chat sessions are associated with your account. Administrators do not routinely view chat logs, but conversations are stored for system improvement and support purposes.
+\end{enumerate}
+
+\newpage
+
+\section{Best Practices}
+
+\subsection{For All Users}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Use strong passwords:} Include uppercase, lowercase, numbers, and special characters
+    \item \textbf{Keep your profile updated:} Ensure your email is current for notifications
+    \item \textbf{Provide descriptive titles:} Use clear, searchable titles for uploads
+    \item \textbf{Add keywords:} Enhance discoverability with relevant tags
+    \item \textbf{Respect copyright:} Only upload content you have permission to share
+    \item \textbf{Use appropriate access tiers:} Don't restrict public content unnecessarily
+    \item \textbf{Cite sources:} When uploading research, properly attribute references
+\end{itemize}
+
+\subsection{For Students}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Return books on time:} Avoid fines and help others access materials
+    \item \textbf{Place holds early:} Don't wait until you urgently need a book
+    \item \textbf{Save drafts:} Work on projects incrementally before final submission
+    \item \textbf{List all team members:} Ensure proper credit for collaborative work
+    \item \textbf{Provide detailed abstracts:} Help others understand your project
+    \item \textbf{Use meaningful project titles:} Avoid vague names like "Final Project"
+\end{itemize}
+
+\subsection{For Researchers}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Complete metadata:} Provide full author lists, keywords, and abstracts
+    \item \textbf{Include DOI:} Add DOI when available for easier citation
+    \item \textbf{Peer review thoughtfully:} Provide constructive feedback
+    \item \textbf{Keep papers updated:} Submit revisions when significant changes occur
+    \item \textbf{Collaborate openly:} Share preliminary findings when appropriate
+\end{itemize}
+
+\subsection{For Librarians}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Maintain catalog accuracy:} Double-check ISBN and publication details
+    \item \textbf{Process returns promptly:} Keep availability information current
+    \item \textbf{Document fine waivers:} Provide clear reasons in audit trail
+    \item \textbf{Review content fairly:} Apply consistent approval standards
+    \item \textbf{Respond to holds quickly:} Notify users when reserved books are available
+\end{itemize}
+
+\subsection{For Administrators}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Review role requests promptly:} Reduce waiting times for users
+    \item \textbf{Document role changes:} Always include justification in audit log
+    \item \textbf{Monitor system health:} Regularly check logs for errors
+    \item \textbf{Backup data regularly:} Export catalogs and content lists periodically
+    \item \textbf{Communicate changes:} Inform users of platform updates
+\end{itemize}
+
+\section{Security and Privacy}
+
+\subsection{Data Protection}
+\begin{itemize}[leftmargin=*]
+    \item All passwords are encrypted using industry-standard bcrypt hashing
+    \item Sensitive data is transmitted over HTTPS
+    \item Access control enforced at database and application levels
+    \item Audit logs track all administrative actions
+    \item Regular security updates and patches applied
+\end{itemize}
+
+\subsection{Privacy Policy Highlights}
+\begin{itemize}[leftmargin=*]
+    \item Personal information (name, email) used only for platform functionality
+    \item No data sharing with third parties without consent
+    \item Email addresses not used for marketing
+    \item User content owned by the uploader
+    \item Account deletion available upon request (contact administrator)
+    \item Chat logs stored for system improvement but not routinely monitored
+\end{itemize}
+
+\subsection{User Responsibilities}
+\begin{itemize}[leftmargin=*]
+    \item Keep your password confidential
+    \item Do not share your account credentials
+    \item Log out from shared computers
+    \item Report suspicious activity to administrators
+    \item Respect other users' privacy and content
+    \item Do not attempt to access restricted content
+    \item Report security vulnerabilities responsibly
+\end{itemize}
+
+\newpage
+
+\section{Support and Contact}
+
+\subsection{Getting Help}
+
+\subsubsection{In-Platform Support}
+\begin{itemize}[leftmargin=*]
+    \item Use the \textbf{Help} link in the footer for FAQs
+    \item Check this user manual for detailed instructions
+    \item Use the AI Chat assistant for quick questions
+\end{itemize}
+
+\subsubsection{Contacting Support}
+For technical issues or questions not covered in this manual:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Email:} Contact the CSE Department IT support team
+    \item \textbf{Phone:} Call the department office during business hours
+    \item \textbf{In-Person:} Visit the department office or library desk
+\end{itemize}
+
+\subsection{Reporting Issues}
+
+\subsubsection{Bug Reports}
+When reporting a bug, include:
+\begin{itemize}[leftmargin=*]
+    \item Your username (email)
+    \item Browser and version
+    \item Steps to reproduce the issue
+    \item Screenshots if applicable
+    \item Error messages
+    \item Date and time of occurrence
+\end{itemize}
+
+\subsubsection{Feature Requests}
+Suggest new features by contacting administrators with:
+\begin{itemize}[leftmargin=*]
+    \item Clear description of the proposed feature
+    \item Use case and benefits
+    \item Priority level (nice-to-have vs. critical)
+\end{itemize}
+
+\subsection{Platform Updates}
+
+\subsubsection{Release Notes}
+\begin{itemize}[leftmargin=*]
+    \item Check the \textbf{Announcements} section for platform updates
+    \item Subscribe to email notifications for major changes
+    \item Review release notes for new features and bug fixes
+\end{itemize}
+
+\subsubsection{Maintenance Windows}
+\begin{itemize}[leftmargin=*]
+    \item Scheduled maintenance announced 48 hours in advance
+    \item Typically performed during low-usage hours
+    \item Expected duration communicated in advance
+    \item Emergency maintenance may occur without notice
+\end{itemize}
+
+\section{Glossary}
+
+\begin{description}[leftmargin=2cm, style=nextline]
+    \item[Access Tier] Permission level required to view content (Public, Student, Researcher, Librarian, Restricted)
+    
+    \item[Audit Log] Immutable record of all administrative actions on the platform
+    
+    \item[Citation] Reference to a source document used by the AI to generate a response
+    
+    \item[DOI] Digital Object Identifier - unique identifier for academic papers
+    
+    \item[Fine] Monetary penalty for overdue book returns (50 BDT/day, max 500 BDT)
+    
+    \item[Hold] Reservation on a borrowed book to be notified when it becomes available
+    
+    \item[ISBN] International Standard Book Number - unique identifier for books
+    
+    \item[Loan Period] Duration for which a book can be borrowed (14 days)
+    
+    \item[Metadata] Descriptive information about content (title, abstract, keywords, tags)
+    
+    \item[RAG] Retrieval-Augmented Generation - AI technology that searches documents to answer questions
+    
+    \item[Role Tier] User permission level (Public, Student, Researcher, Librarian, Administrator)
+    
+    \item[Session] Continuous conversation thread in AI chat
+    
+    \item[Status] Content publication state (Draft, Review, Published, Archived)
+\end{description}
+
+\newpage
+
+\section{Appendices}
+
+\subsection{Appendix A: Quick Reference Card}
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=primarycolor,title=Quick Actions by Role]
+
+\textbf{Student}
+\begin{itemize}[leftmargin=*]
+    \item Browse catalog → Borrow book → Return → Pay fines
+    \item Upload archive/project → Edit metadata
+    \item Request role upgrade
+    \item Use AI chat assistant
+\end{itemize}
+
+\textbf{Researcher}
+\begin{itemize}[leftmargin=*]
+    \item Everything students can do PLUS:
+    \item Submit research papers
+    \item Review other researchers' papers
+    \item Access researcher-tier content
+\end{itemize}
+
+\textbf{Librarian}
+\begin{itemize}[leftmargin=*]
+    \item Everything researchers can do (except borrow) PLUS:
+    \item Add books to catalog
+    \item Import/export catalog
+    \item View/manage all loans and fines
+    \item Waive fines
+    \item Approve content (projects, research, archives)
+\end{itemize}
+
+\textbf{Administrator}
+\begin{itemize}[leftmargin=*]
+    \item Everything librarians can do PLUS:
+    \item Manage users and change roles
+    \item Approve/decline role requests
+    \item View audit logs
+    \item Configure system settings
+\end{itemize}
+
+\end{tcolorbox}
+
+\subsection{Appendix B: Keyboard Shortcuts}
+
+\begin{longtable}{|l|l|}
+\hline
+\textbf{Action} & \textbf{Shortcut} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Shortcut} \\
+\hline
+\endhead
+\hline
+\endfoot
+Open search & Ctrl + K (Cmd + K on Mac) \\
+\hline
+Focus search bar & / \\
+\hline
+Open AI chat & Ctrl + . (Cmd + . on Mac) \\
+\hline
+Open notifications & Ctrl + N (Cmd + N on Mac) \\
+\hline
+Navigate to Library & Alt + L \\
+\hline
+Navigate to Research & Alt + R \\
+\hline
+Navigate to Projects & Alt + P \\
+\hline
+Navigate to Archives & Alt + A \\
+\hline
+Open profile & Alt + U \\
+\hline
+Logout & Alt + X \\
+\hline
+\end{longtable}
+
+\subsection{Appendix C: File Format Support}
+
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{Category} & \textbf{Formats} & \textbf{Max Size} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Category} & \textbf{Formats} & \textbf{Max Size} \\
+\hline
+\endhead
+\hline
+\endfoot
+Documents & PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS & 50 MB \\
+\hline
+Images & JPG, JPEG, PNG, GIF & 50 MB \\
+\hline
+Videos & MP4 & 50 MB \\
+\hline
+Audio & MP3 & 50 MB \\
+\hline
+Archives & ZIP & 50 MB \\
+\hline
+Mobile Apps & APK & 50 MB \\
+\hline
+External Links & URL (YouTube, websites) & N/A \\
+\hline
+\end{longtable}
+
+\newpage
+
+\subsection{Appendix D: API Endpoints (For Developers)}
+
+\begin{tcolorbox}[colback=yellow!10!white,colframe=orange,title=For Technical Users]
+This section is for developers integrating with the platform or building custom tools.
+\end{tcolorbox}
+
+\subsubsection{Authentication Endpoints}
+\begin{verbatim}
+POST /api/v1/auth/register       - Create account
+POST /api/v1/auth/login          - Login
+POST /api/v1/auth/refresh        - Refresh access token
+GET  /api/v1/auth/me             - Get current user info
+POST /api/v1/auth/logout         - Logout
+POST /api/v1/auth/forgot-password - Request password reset
+POST /api/v1/auth/reset-password  - Reset password
+\end{verbatim}
+
+\subsubsection{Library Endpoints}
+\begin{verbatim}
+GET  /api/v1/library/catalog          - List catalog
+GET  /api/v1/library/catalog/{itemId} - Get book details
+POST /api/v1/library/loans            - Borrow book
+GET  /api/v1/library/loans            - List user's loans
+POST /api/v1/library/loans/{id}/return - Return book
+GET  /api/v1/library/fines            - List user's fines
+POST /api/v1/library/fines/{id}/pay   - Pay fine
+POST /api/v1/library/holds            - Place hold
+GET  /api/v1/library/holds            - List holds
+DELETE /api/v1/library/holds/{id}     - Cancel hold
+\end{verbatim}
+
+\subsubsection{Media Endpoints}
+\begin{verbatim}
+POST /api/v1/media/upload              - Upload file
+GET  /api/v1/media                     - List media
+GET  /api/v1/media/{itemId}            - Get media details
+GET  /api/v1/media/{itemId}/download   - Download file
+GET  /api/v1/media/my-uploads          - List user's uploads
+PATCH /api/v1/media/{itemId}/metadata  - Edit metadata
+DELETE /api/v1/media/{itemId}          - Delete media
+\end{verbatim}
+
+\subsubsection{Research Endpoints}
+\begin{verbatim}
+POST /api/v1/research                  - Submit paper
+GET  /api/v1/research                  - List papers
+GET  /api/v1/research/{paperId}        - Get paper details
+PUT  /api/v1/research/{paperId}        - Update paper
+POST /api/v1/research/{id}/submit      - Submit for review
+POST /api/v1/research/{id}/review      - Add review
+POST /api/v1/research/{id}/publish     - Publish paper
+\end{verbatim}
+
+\subsubsection{AI Endpoints}
+\begin{verbatim}
+POST /api/v1/ai/chat                   - Send chat query
+GET  /api/v1/ai/chat/history/{sessionId} - Get chat history
+POST /api/v1/ai/summarize              - Summarize document
+\end{verbatim}
+
+\subsubsection{Admin Endpoints}
+\begin{verbatim}
+GET  /api/v1/admin/users               - List users
+PATCH /api/v1/admin/users/{id}/role    - Change user role
+GET  /api/v1/admin/audit-log           - View audit log
+GET  /api/v1/admin/catalog/export      - Export catalog CSV
+POST /api/v1/admin/catalog/import      - Import catalog CSV
+GET  /api/v1/admin/role-requests       - List role requests
+POST /api/v1/admin/role-requests/{id}/decide - Approve/decline
+\end{verbatim}
+
+\newpage
+
+\subsection{Appendix E: System Architecture Overview}
+
+\subsubsection{Technology Stack}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Frontend:} Next.js 14 (React framework), TypeScript, Tailwind CSS
+    \item \textbf{Backend API:} Go (Golang), Chi router
+    \item \textbf{Database:} PostgreSQL 16 with pgvector extension
+    \item \textbf{File Storage:} MinIO (S3-compatible object storage)
+    \item \textbf{Cache/Queue:} Redis
+    \item \textbf{AI/RAG Service:} Python FastAPI, Sentence Transformers
+    \item \textbf{LLM Providers:} Groq (primary), Google Gemini (fallback)
+    \item \textbf{Web Server:} Nginx (reverse proxy)
+\end{itemize}
+
+\subsubsection{Key Features}
+\begin{itemize}[leftmargin=*]
+    \item JWT-based authentication with refresh token rotation
+    \item Role-based access control (RBAC) at database and application levels
+    \item Vector embeddings for semantic search (768-dimensional)
+    \item Hybrid search combining full-text and semantic similarity
+    \item Real-time notifications via WebSocket (planned)
+    \item Audit logging for compliance and security
+    \item Automated fine calculation via background worker
+    \item Email notifications via SMTP (Brevo/Sendinblue)
+\end{itemize}
+
+\subsection{Appendix F: Default User Accounts}
+
+\textbf{For testing and initial setup, the following accounts are pre-configured:}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red,title=Security Warning]
+Change these default passwords immediately in production!
+\end{tcolorbox}
+
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{Email} & \textbf{Password} & \textbf{Role} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Email} & \textbf{Password} & \textbf{Role} \\
+\hline
+\endhead
+\hline
+\endfoot
+admin@cs.du.ac.bd & Admin@12345 & Administrator \\
+\hline
+librarian@cs.du.ac.bd & Staff@12345 & Librarian \\
+\hline
+researcher@cs.du.ac.bd & Research@12345 & Researcher \\
+\hline
+student@cs.du.ac.bd & Student@12345 & Student \\
+\hline
+\end{longtable}
+
+\subsection{Appendix G: Configuration Settings}
+
+\subsubsection{Library Configuration}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{LOAN\_PERIOD\_DAYS:} 14 days
+    \item \textbf{FINE\_RATE\_BDT\_PER\_DAY:} 50 BDT
+    \item \textbf{MAX\_FINE\_PER\_LOAN\_BDT:} 500 BDT
+    \item \textbf{FINE\_BLOCK\_THRESHOLD\_BDT:} 50 BDT
+    \item \textbf{FINE\_CALC\_INTERVAL:} 24 hours
+\end{itemize}
+
+\subsubsection{Upload Configuration}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Maximum File Size:} 50 MB per file
+    \item \textbf{Allowed Document Formats:} PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS
+    \item \textbf{Allowed Media Formats:} MP4, MP3, JPG, JPEG, PNG, GIF
+    \item \textbf{Allowed Archive Formats:} ZIP, APK
+\end{itemize}
+
+\subsubsection{AI/RAG Configuration}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Embedding Model:} sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+    \item \textbf{Embedding Dimension:} 768
+    \item \textbf{Chunk Size:} 512 tokens
+    \item \textbf{Chunk Overlap:} 50 tokens
+    \item \textbf{Top-K Results:} 10
+    \item \textbf{Vector Search Limit:} 8
+    \item \textbf{FTS Search Limit:} 8
+    \item \textbf{Max Query Length:} 5000 characters
+    \item \textbf{Max Context Window:} 10 previous messages
+\end{itemize}
+
+\subsubsection{Authentication Configuration}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{JWT\_EXPIRY\_HOURS:} 1 hour
+    \item \textbf{REFRESH\_EXPIRY\_DAYS:} 7 days
+    \item \textbf{Bcrypt Cost:} 12 rounds
+    \item \textbf{Failed Login Attempts:} 5 attempts
+    \item \textbf{Account Lockout Duration:} 15 minutes
+    \item \textbf{Password Reset Link Expiry:} 1 hour
+\end{itemize}
+
+\newpage
+
+\subsection{Appendix H: Change Log}
+
+\subsubsection{Version 1.0.0 (Initial Release)}
+\textbf{Release Date:} July 2026
+
+\textbf{Core Features:}
+\begin{itemize}[leftmargin=*]
+    \item User authentication and authorization system
+    \item Five-tier role hierarchy (Public, Student, Researcher, Librarian, Administrator)
+    \item Library catalog management with search and filters
+    \item Book borrowing and return workflow
+    \item Automated fine calculation (50 BDT/day, max 500 BDT)
+    \item Hold/reservation system
+    \item Digital archive management
+    \item Research paper submission and review workflow
+    \item Student project showcase
+    \item Media upload (PDF, DOCX, images, videos, etc.)
+    \item AI-powered chat assistant with RAG
+    \item Document summarization
+    \item Role request system
+    \item In-app and email notifications
+    \item Audit logging for administrative actions
+    \item CSV import/export for library catalog
+    \item Mobile-responsive design
+\end{itemize}
+
+\textbf{Security Features:}
+\begin{itemize}[leftmargin=*]
+    \item JWT-based authentication
+    \item Refresh token rotation
+    \item Bcrypt password hashing (cost 12)
+    \item Brute-force protection (5 attempts, 15-min lockout)
+    \item Role-based access control
+    \item Audit trail for admin actions
+\end{itemize}
+
+\textbf{Known Limitations:}
+\begin{itemize}[leftmargin=*]
+    \item No automatic loan renewals
+    \item Maximum file size limited to 50 MB
+    \item No offline mode
+    \item AI chat limited to English and Bengali
+    \item No real-time WebSocket notifications (email only)
+\end{itemize}
+
+\subsection{Appendix I: Roadmap (Planned Features)}
+
+\subsubsection{Upcoming Features}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Enhanced Search:}
+        \begin{itemize}
+            \item Advanced Boolean operators
+            \item Saved search queries
+            \item Search history
+        \end{itemize}
+    \item \textbf{Social Features:}
+        \begin{itemize}
+            \item User profiles with bios
+            \item Follow other researchers
+            \item Comment on research papers
+            \item Rate and review books
+        \end{itemize}
+    \item \textbf{Collaboration:}
+        \begin{itemize}
+            \item Shared project workspaces
+            \item Real-time document editing
+            \item Discussion forums
+        \end{itemize}
+    \item \textbf{Analytics:}
+        \begin{itemize}
+            \item Usage statistics dashboard
+            \item Popular content reports
+            \item User engagement metrics
+        \end{itemize}
+    \item \textbf{Mobile App:}
+        \begin{itemize}
+            \item Native iOS and Android apps
+            \item Offline reading
+            \item Push notifications
+            \item Barcode scanning for checkouts
+        \end{itemize}
+    \item \textbf{Integration:}
+        \begin{itemize}
+            \item OAuth/SSO with university systems
+            \item Integration with institutional repositories
+            \item API for third-party applications
+        \end{itemize}
+\end{itemize}
+
+\newpage
+
+\section{Conclusion}
+
+The CSEDU Digital Knowledge Platform represents a comprehensive solution for managing library resources, research papers, student projects, and digital archives within an academic environment. By integrating traditional library management with modern AI-powered features, the platform facilitates knowledge sharing, collaboration, and discovery.
+
+\subsection{Key Takeaways}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Unified Access:} Single platform for all departmental knowledge resources
+    \item \textbf{Role-Based Permissions:} Appropriate access levels for different user types
+    \item \textbf{Intelligent Search:} AI-powered discovery across all content types
+    \item \textbf{Streamlined Workflows:} Automated processes for borrowing, fines, and approvals
+    \item \textbf{Transparency:} Audit logs and clear status tracking
+    \item \textbf{Accessibility:} Mobile-responsive design, multilingual support
+\end{itemize}
+
+\subsection{Getting the Most from the Platform}
+
+To maximize your experience:
+\begin{enumerate}[leftmargin=*]
+    \item Explore all sections to understand available resources
+    \item Use descriptive titles and keywords when uploading content
+    \item Leverage the AI assistant for quick information retrieval
+    \item Keep your profile updated for accurate notifications
+    \item Provide feedback to help improve the platform
+    \item Respect due dates to avoid fines and help others
+    \item Collaborate with colleagues through shared content
+\end{enumerate}
+
+\subsection{Continuous Improvement}
+
+The platform is actively maintained and regularly updated with:
+\begin{itemize}[leftmargin=*]
+    \item New features based on user feedback
+    \item Security patches and bug fixes
+    \item Performance optimizations
+    \item Enhanced AI capabilities
+    \item Expanded content collections
+\end{itemize}
+
+\subsection{Your Feedback Matters}
+
+We encourage all users to:
+\begin{itemize}[leftmargin=*]
+    \item Report bugs and technical issues
+    \item Suggest feature enhancements
+    \item Share best practices with the community
+    \item Contribute to documentation improvements
+    \item Participate in user surveys
+\end{itemize}
+
+\vspace{1cm}
+
+\begin{center}
+\Large
+\textbf{Thank you for using the CSEDU Digital Knowledge Platform!}
+\end{center}
+
+\vspace{0.5cm}
+
+\begin{center}
+For support, contact the CSE Department IT team\\
+Department of Computer Science and Engineering\\
+University of Dhaka\\
+Dhaka-1000, Bangladesh
+\end{center}
+
+\vspace{1cm}
+
+\begin{center}
+\rule{0.5\textwidth}{0.4pt}\\
+\vspace{0.3cm}
+\textit{Version 1.0.0 | July 2026}\\
+\textit{Document Generated: \today}
+\end{center}
+
+\end{document}
