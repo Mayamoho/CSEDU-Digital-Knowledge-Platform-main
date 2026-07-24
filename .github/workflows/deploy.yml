@@ -126,46 +126,13 @@ jobs:
           port: ${{ secrets.VM_PORT || 22 }}
           script_stop: true
           command_timeout: 30m
+          # One command only. appleboy/ssh-action rewrites a multi-line script
+          # line by line and splices an exit-code check between statements,
+          # which mangles loops and redirects — that is what hung the previous
+          # deploy on `psql < file`. All the real logic lives in the committed
+          # script, which runs under a normal bash on the VM.
           script: |
-            set -e
-            cd ${{ secrets.VM_APP_DIR || '~/csedu-platform' }}
-
-            git fetch origin
-            git reset --hard origin/main
-
-            export IMAGE_TAG=${{ github.sha }}
-            COMPOSE="docker compose -f docker-compose.prod.yml -f docker-compose.ghcr.yml"
-
-            # Only needed while the GHCR packages are private. Make them public
-            # in GitHub → Packages → Package settings and this becomes a no-op.
-            if [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            fi
-
-            # Idempotent DB migrations (same ones quick-update.sh applies)
-            for f in infra/db/migrations/*.sql; do
-              echo "migration: $f"
-              $COMPOSE exec -T postgres psql -U csedu_user -d csedu_platform < "$f" || true
-            done
-
-            # Prefer the images GitHub already built. If the GHCR packages are
-            # private and no token is configured, fall back to building on the
-            # VM so a deploy never silently stops half-way.
-            if $COMPOSE pull frontend api rag fine-worker; then
-              echo "using prebuilt GHCR images"
-              $COMPOSE up -d nginx frontend api rag ingestion-worker fine-worker
-            else
-              echo "GHCR pull failed — building on the VM instead"
-              PROD="docker compose -f docker-compose.prod.yml"
-              $PROD build frontend api rag ingestion-worker fine-worker
-              $PROD up -d nginx frontend api rag ingestion-worker fine-worker
-            fi
-
-            # nginx caches upstream container IPs; restart so it re-resolves them
-            docker compose -f docker-compose.prod.yml restart nginx
-
-            docker image prune -f
-            docker compose -f docker-compose.prod.yml ps
+            cd ${{ secrets.VM_APP_DIR || '~/csedu-platform' }} && git fetch origin && git reset --hard origin/main && bash scripts/deploy-remote.sh ${{ github.sha }}
 
       - name: Smoke check
         run: |
