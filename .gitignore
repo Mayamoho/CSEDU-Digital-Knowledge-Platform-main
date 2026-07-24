@@ -28,3 +28,6 @@ minio_data/
 # OS
 .DS_Store
 *.swp
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo

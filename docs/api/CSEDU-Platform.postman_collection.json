@@ -1,0 +1,2754 @@
+{
+  "info": {
+    "name": "CSEDU Digital Knowledge Platform API v1",
+    "description": "Complete REST API for the CSEDU Digital Knowledge Platform (CSE 4113 \u2014 Internet Programming Lab, Team Devops).\n\n**Base URL:** `https://devops.farefin.com/api/v1`\n\n## Quick start\n1. Select the **CSEDU \u2014 Production** environment.\n2. Run **Auth \u2192 Login (admin)**. The test script stores `accessToken` automatically; every other request inherits it via collection-level Bearer auth.\n3. Set the id variables (`catalogId`, `itemId`, `loanId`, \u2026) from any list response.\n\n## Conventions\n- REST over JSON, versioned by URL prefix (`/api/v1`).\n- Auth: `Authorization: Bearer <access_token>` (JWT, 1-hour TTL, 7-day refresh token).\n- Errors: `{\"error\": \"message\"}` with 400 / 401 / 403 / 404 / 409 / 500.\n- List endpoints: `page`, `per_page`, and a `total` count for server-side pagination.\n- `OptionalAuth` routes work anonymously but widen their result set when a token is sent.\n\n## Roles\n`public` < `student` < `researcher` < `librarian` < `administrator`. Role checks run in `middleware.RequireRole`, which reads the role from the signed JWT \u2014 never from the request body.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Auth",
+      "description": "Registration, password login, JWT refresh, Google OAuth 2.0 SSO, passwordless magic-link sign-in, profile and session management.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Public self-registration. The server always forces role_tier=student \u2014 a client-supplied `role` field is ignored (RBAC escalation fix). Returns an access + refresh token pair.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@cs.du.ac.bd\",\n  \"password\": \"Passw0rd@123\",\n  \"name\": \"New User\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', res.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', res.refresh_token || '');",
+                  "  if (res.user && res.user.user_id) pm.collectionVariables.set('userId', res.user.user_id);",
+                  "  pm.test('token issued', () => pm.expect(res.access_token).to.be.a('string'));",
+                  "}",
+                  "pm.test('status 200/201', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Password login. Stores access/refresh tokens into collection variables so every other request in this collection authenticates automatically. Run this first.\n\nAccount lockout: 5 consecutive failures locks the account for 15 minutes.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', res.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', res.refresh_token || '');",
+                  "  if (res.user && res.user.user_id) pm.collectionVariables.set('userId', res.user.user_id);",
+                  "  pm.test('token issued', () => pm.expect(res.access_token).to.be.a('string'));",
+                  "}",
+                  "pm.test('status 200/201', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (librarian)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Switch the collection to a librarian session (circulation desk, fines, catalog writes).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{librarianEmail}}\",\n  \"password\": \"{{librarianPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', res.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', res.refresh_token || '');",
+                  "  if (res.user && res.user.user_id) pm.collectionVariables.set('userId', res.user.user_id);",
+                  "  pm.test('token issued', () => pm.expect(res.access_token).to.be.a('string'));",
+                  "}",
+                  "pm.test('status 200/201', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (student)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Switch the collection to a student session (borrowing, holds, project submission).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{studentEmail}}\",\n  \"password\": \"{{studentPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', res.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', res.refresh_token || '');",
+                  "  if (res.user && res.user.user_id) pm.collectionVariables.set('userId', res.user.user_id);",
+                  "  pm.test('token issued', () => pm.expect(res.access_token).to.be.a('string'));",
+                  "}",
+                  "pm.test('status 200/201', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Exchanges a valid refresh token (7-day TTL, hashed in `refresh_tokens`) for a new 1-hour access token. Revoked tokens are rejected server-side.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', res.access_token);",
+                  "  pm.collectionVariables.set('refreshToken', res.refresh_token || '');",
+                  "  if (res.user && res.user.user_id) pm.collectionVariables.set('userId', res.user.user_id);",
+                  "  pm.test('token issued', () => pm.expect(res.access_token).to.be.a('string'));",
+                  "}",
+                  "pm.test('status 200/201', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/providers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "providers"
+              ]
+            },
+            "description": "Which optional sign-in providers are configured. Drives UI gating: the \"Continue with Google\" button is hidden when GOOGLE_CLIENT_ID is unset.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Google OAuth login (redirect)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google",
+                "login"
+              ]
+            },
+            "description": "Full-page redirect to Google's consent screen (SDD Flow 4). Not an XHR endpoint \u2014 open in a browser. Postman will follow the 302.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Google OAuth callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback?code=AUTH_CODE_FROM_GOOGLE&state=STATE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google",
+                "callback"
+              ],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "AUTH_CODE_FROM_GOOGLE"
+                },
+                {
+                  "key": "state",
+                  "value": "STATE"
+                }
+              ]
+            },
+            "description": "Google redirects here. The API exchanges the code, find-or-creates the user by email, and hands the token back to the frontend via URL fragment.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Magic link \u2014 request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/magic/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "magic",
+                "request"
+              ]
+            },
+            "description": "Passwordless email sign-in. Generates a single-use token in Redis and emails the link over SMTP. Also serves as the forgot-password path.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@cs.du.ac.bd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Magic link \u2014 verify",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/magic/verify?token=TOKEN_FROM_EMAIL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "magic",
+                "verify"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "TOKEN_FROM_EMAIL"
+                }
+              ]
+            },
+            "description": "Consumes the emailed token and issues a session. Single-use, short TTL.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Current user profile from the bearer token."
+          }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Edit name/email. Email uniqueness is enforced by `uq_users_email`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"email\": \"updated@cs.du.ac.bd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "Requires the current password. New hash is bcrypt cost 12.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"Admin@12345\",\n  \"new_password\": \"NewPassw0rd@123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh token server-side (`refresh_tokens.revoked = true`)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Library \u2014 Catalog",
+      "description": "Public catalog search with faceted filters; librarian-only writes.",
+      "item": [
+        {
+          "name": "List catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/catalog?q=algorithms&topic=Computer Science&availability=available&page=1&per_page=12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "catalog"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "algorithms"
+                },
+                {
+                  "key": "topic",
+                  "value": "Computer Science"
+                },
+                {
+                  "key": "availability",
+                  "value": "available"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "12"
+                }
+              ]
+            },
+            "description": "Public, paginated catalog search. `q` runs PostgreSQL full-text search over title + author (GIN indexes). `topic` / `availability` drive the faceted filter tree. Server-side pagination \u2014 response carries `total` for the pager.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "List topics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/catalog/topics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "catalog",
+                "topics"
+              ]
+            },
+            "description": "Distinct topic facets with counts, used to build the catalog filter hierarchy.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get catalog item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/catalog/{{catalogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "catalog",
+                "{{catalogId}}"
+              ]
+            },
+            "description": "Single book record including copy counts and barcode.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Add book (librarian)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "catalog"
+              ]
+            },
+            "description": "Librarian/administrator only. ISBN is uniquely indexed (partial index, NULLs allowed) so CSV re-import upserts instead of duplicating. A barcode `B-xxxxxxxx` is assigned automatically by trigger.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction to Algorithms\",\n  \"author\": \"Cormen, Leiserson, Rivest, Stein\",\n  \"isbn\": \"9780262046305\",\n  \"topic\": \"Computer Science\",\n  \"format\": \"book\",\n  \"location\": \"Shelf A-12\",\n  \"year\": 2022,\n  \"total_copies\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "My added books (librarian)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/catalog/my-books",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "catalog",
+                "my-books"
+              ]
+            },
+            "description": "Books created by the calling librarian."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Library \u2014 Loans",
+      "description": "Borrowing and returning, member and staff views.",
+      "item": [
+        {
+          "name": "Borrow book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "loans"
+              ]
+            },
+            "description": "Creates a loan for the calling user. Guarded by the partial unique index `idx_loans_active_user_item` (user_id, catalog_id WHERE return_date IS NULL) \u2014 the same user cannot hold two active loans on one title. Blocked when outstanding fines exceed FINE_BLOCK_THRESHOLD_BDT. Due date = now + LOAN_PERIOD_DAYS.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalog_id\": \"{{catalogId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "My loans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "loans"
+              ]
+            },
+            "description": "Loan history for the calling user."
+          }
+        },
+        {
+          "name": "Return book",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/loans/{{loanId}}/return",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "loans",
+                "{{loanId}}",
+                "return"
+              ]
+            },
+            "description": "Sets return_date, restores available_copies, and fulfils the oldest active hold on that title."
+          }
+        },
+        {
+          "name": "All loans (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/loans/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "loans",
+                "all"
+              ]
+            },
+            "description": "Librarian/administrator view across all members."
+          }
+        },
+        {
+          "name": "Loan service \u2014 checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "checkout"
+              ]
+            },
+            "description": "Dedicated loan-service equivalent of /library/loans.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalog_id\": \"{{catalogId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Loan service \u2014 return",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanId}}/return",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanId}}",
+                "return"
+              ]
+            },
+            "description": "Dedicated loan-service return."
+          }
+        },
+        {
+          "name": "Loan service \u2014 my loans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/loans/my-loans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "my-loans"
+              ]
+            },
+            "description": "Dedicated loan-service history."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Library \u2014 Circulation Desk",
+      "description": "Barcode-driven checkout/return for the librarian desk.",
+      "item": [
+        {
+          "name": "Barcode checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/circulation/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "circulation",
+                "checkout"
+              ]
+            },
+            "description": "Circulation desk. HID barcode scanners appear as keyboards, so the API receives plain strings; trailing \\r/\\n are stripped server-side. Resolves member + item, then creates the loan in one transaction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_barcode\": \"M-A0000000\",\n  \"item_barcode\": \"B-1F2E3D4C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Barcode return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/circulation/return",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "circulation",
+                "return"
+              ]
+            },
+            "description": "Returns whatever active loan is attached to that item barcode.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"item_barcode\": \"B-1F2E3D4C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Barcode lookup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/circulation/lookup?code=B-1F2E3D4C",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "circulation",
+                "lookup"
+              ],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "B-1F2E3D4C"
+                }
+              ]
+            },
+            "description": "Resolves a scanned code to either a member or a catalog item so the desk UI can show context before committing."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Library \u2014 Holds",
+      "description": "Reservations on unavailable titles.",
+      "item": [
+        {
+          "name": "Place hold",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/holds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "holds"
+              ]
+            },
+            "description": "Reserves an unavailable title. Librarians are rejected (403). One active hold per user per item.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalog_id\": \"{{catalogId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "My holds",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/holds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "holds"
+              ]
+            },
+            "description": "Active/fulfilled holds for the calling user."
+          }
+        },
+        {
+          "name": "Cancel hold",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/holds/{{holdId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "holds",
+                "{{holdId}}"
+              ]
+            },
+            "description": "Cancels an active hold."
+          }
+        },
+        {
+          "name": "All holds (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/holds/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "holds",
+                "all"
+              ]
+            },
+            "description": "Queue view for librarians."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Library \u2014 Fines & Payments",
+      "description": "Overdue fines, simulated bKash/Nagad OTP gateway, in-person cash settlement, waivers.",
+      "item": [
+        {
+          "name": "My fines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines"
+              ]
+            },
+            "description": "Fines owed by the calling user."
+          }
+        },
+        {
+          "name": "Pay fine (direct)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "pay"
+              ]
+            },
+            "description": "Direct settlement path. Writes a `payments` row and flips the fine to paid.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 150.0,\n  \"method\": \"cash\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Online payment \u2014 initiate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/pay/initiate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "pay",
+                "initiate"
+              ]
+            },
+            "description": "Simulated bKash/Nagad gateway. Opens a `payment_sessions` row and returns a demo OTP (`demo_otp`) instead of calling a real PSP \u2014 gateway integration is out of scope per the SDD. One live session per fine (partial unique index).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"bkash\",\n  \"account_number\": \"01712345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Online payment \u2014 confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/pay/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "pay",
+                "confirm"
+              ]
+            },
+            "description": "Verifies the OTP, marks the session completed, inserts the payment, settles the fine.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{paymentSessionId}}\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cash payment \u2014 request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/pay/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "pay",
+                "cash"
+              ]
+            },
+            "description": "Marks the fine as awaiting in-person counter payment; appears in the librarian queue."
+          }
+        },
+        {
+          "name": "Cash payment \u2014 cancel",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/pay/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "pay",
+                "cancel"
+              ]
+            },
+            "description": "Cancels the member's open payment session."
+          }
+        },
+        {
+          "name": "All fines (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "all"
+              ]
+            },
+            "description": "Every fine, for librarians."
+          }
+        },
+        {
+          "name": "Cash requests queue (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/cash-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "cash-requests"
+              ]
+            },
+            "description": "Sessions with status `awaiting_counter` waiting on a librarian to take cash."
+          }
+        },
+        {
+          "name": "Confirm cash payment (staff)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/confirm-cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "confirm-cash"
+              ]
+            },
+            "description": "Librarian confirms cash received; records `confirmed_by` for the audit trail."
+          }
+        },
+        {
+          "name": "Waive fine (staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/library/fines/{{fineId}}/waive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "library",
+                "fines",
+                "{{fineId}}",
+                "waive"
+              ]
+            },
+            "description": "Sets fine status to `waived` with a reason. Audit-logged.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Book returned damaged by library handling\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Calculate fines (staff)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fines/calculate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fines",
+                "calculate"
+              ]
+            },
+            "description": "Manually triggers the same overdue calculation the fine-worker cron runs nightly. `UNIQUE(loan_id)` on fines makes repeat runs idempotent."
+          }
+        },
+        {
+          "name": "Overdue fines (staff)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fines/overdue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fines",
+                "overdue"
+              ]
+            },
+            "description": "All overdue, unsettled loans."
+          }
+        },
+        {
+          "name": "Pay fine (fine service)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/fines/{{fineId}}/pay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "fines",
+                "{{fineId}}",
+                "pay"
+              ]
+            },
+            "description": "Staff-side settlement through the dedicated fine service.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 150.0,\n  \"user_id\": \"{{userId}}\",\n  \"loan_id\": \"{{loanId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Media & Archive",
+      "description": "Polymorphic uploads (archive / research / project), access-tiered downloads from MinIO, metadata editing, RAG ingestion triggers.",
+      "item": [
+        {
+          "name": "List media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media?item_type=archive&q=machine learning&format=pdf&access=public&page=1&per_page=12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media"
+              ],
+              "query": [
+                {
+                  "key": "item_type",
+                  "value": "archive"
+                },
+                {
+                  "key": "q",
+                  "value": "machine learning"
+                },
+                {
+                  "key": "format",
+                  "value": "pdf"
+                },
+                {
+                  "key": "access",
+                  "value": "public"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "12"
+                }
+              ]
+            },
+            "description": "Polymorphic listing over `media_items` (archive | research | project). Results are filtered by the caller's access_tier \u2014 anonymous callers only ever see `public` rows. OptionalAuth: works with or without a token, but returns more with one.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get media item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "{{itemId}}"
+              ]
+            },
+            "description": "Single item with its 1:1 metadata record (tags, abstract, keywords, language).",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Download file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/{{itemId}}/download?inline=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "{{itemId}}",
+                "download"
+              ],
+              "query": [
+                {
+                  "key": "inline",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Streams the binary from MinIO. `inline=true` renders in-browser (PDF viewer); omit it to force download. Access tier is re-checked on every request."
+          }
+        },
+        {
+          "name": "Upload",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "upload"
+              ]
+            },
+            "description": "multipart/form-data. Binary goes to MinIO, metadata to PostgreSQL, then an ingestion job is queued in Redis. The worker extracts text, chunks at 512 tokens / 50 overlap, embeds with MiniLM and writes 768-dim vectors to pgvector (SDD Flow 1).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "PDF/video/image/audio/docx \u2014 omit when using external_url"
+                },
+                {
+                  "key": "title",
+                  "value": "Compiler Design Lecture Notes",
+                  "type": "text"
+                },
+                {
+                  "key": "item_type",
+                  "value": "archive",
+                  "type": "text",
+                  "description": "archive | research | project"
+                },
+                {
+                  "key": "abstract",
+                  "value": "Lecture notes covering lexical analysis and parsing.",
+                  "type": "text"
+                },
+                {
+                  "key": "keywords",
+                  "value": "compilers,parsing,lexical analysis",
+                  "type": "text",
+                  "description": "comma-separated"
+                },
+                {
+                  "key": "access_tier",
+                  "value": "public",
+                  "type": "text",
+                  "description": "public | student | researcher | librarian | restricted"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "published",
+                  "type": "text",
+                  "description": "draft | review | published | archived"
+                },
+                {
+                  "key": "external_url",
+                  "value": "",
+                  "type": "text",
+                  "description": "YouTube/external link instead of a file"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "My uploads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/my-uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "my-uploads"
+              ]
+            },
+            "description": "Items created by the calling user, with ingestion status."
+          }
+        },
+        {
+          "name": "Update metadata",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/media/{{itemId}}/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "{{itemId}}",
+                "metadata"
+              ]
+            },
+            "description": "Owner/admin metadata edit. Array params are cast (`::text[]`) inside the upsert so pgx infers the right type through COALESCE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated title\",\n  \"abstract\": \"Revised abstract.\",\n  \"keywords\": [\n    \"compilers\",\n    \"parsing\"\n  ],\n  \"tags\": [\n    \"lecture\",\n    \"cse-4108\"\n  ],\n  \"language\": \"en\",\n  \"access_tier\": \"student\",\n  \"status\": \"published\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Replace file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/{{itemId}}/file",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "{{itemId}}",
+                "file"
+              ]
+            },
+            "description": "Swaps the stored binary and re-queues ingestion so the vector index stays in sync.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete media (owner/admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/media/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "media",
+                "{{itemId}}"
+              ]
+            },
+            "description": "Cascades to research_papers / student_projects / vector_embeddings / rag_index_state, clears resource_reviews and removes the MinIO object."
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Research Papers",
+      "description": "Submission, peer review and publication workflow (SDD Flow 5).",
+      "item": [
+        {
+          "name": "List research",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/research?q=neural&rtype=journal&year=2025&page=1&per_page=12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "neural"
+                },
+                {
+                  "key": "rtype",
+                  "value": "journal"
+                },
+                {
+                  "key": "year",
+                  "value": "2025"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "12"
+                }
+              ]
+            },
+            "description": "Published papers, publicly listable. `rtype` is derived (journal / conference / preprint) from which field is populated \u2014 no extra column.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get paper",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/research/{{paperId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research",
+                "{{paperId}}"
+              ]
+            },
+            "description": "Single paper joined across media_items + media_metadata + research_papers. Date columns are returned via `to_char()` because pgx cannot scan timestamptz into *string.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Submit paper",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/research",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research"
+              ]
+            },
+            "description": "Creates the media_item + metadata + research_papers rows in one transaction. Starts in `draft` (SDD Flow 5).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bangla NLP for Academic Search\",\n  \"authors\": [\n    \"Mehedi Hasan Sakib\"\n  ],\n  \"co_authors\": [\n    \"Sumaiya Tabassum\"\n  ],\n  \"abstract\": \"We evaluate multilingual embeddings\\u2026\",\n  \"keywords\": [\n    \"nlp\",\n    \"bangla\",\n    \"retrieval\"\n  ],\n  \"publication_date\": \"2026-03-01\",\n  \"doi\": \"10.1234/csedu.2026.001\",\n  \"journal\": \"CSEDU Journal\",\n  \"file_path\": \"uploads/paper.pdf\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update paper",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/research/{{paperId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research",
+                "{{paperId}}"
+              ]
+            },
+            "description": "Author edit while the paper is still a draft or in review.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bangla NLP for Academic Search (v2)\",\n  \"abstract\": \"Revised abstract.\",\n  \"keywords\": [\n    \"nlp\",\n    \"bangla\",\n    \"retrieval\",\n    \"rag\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Submit for review",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/research/{{paperId}}/submit-for-review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research",
+                "{{paperId}}",
+                "submit-for-review"
+              ]
+            },
+            "description": "draft \u2192 review. Notifies reviewers in-app and by email."
+          }
+        },
+        {
+          "name": "Review paper (researcher/admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/research/{{paperId}}/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research",
+                "{{paperId}}",
+                "review"
+              ]
+            },
+            "description": "Records reviewer_id, review_notes, reviewed_at. Rejection sends the paper back to draft so the author can revise and resubmit.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"notes\": \"Accepted with minor revisions.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Publish paper",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/research/{{paperId}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "research",
+                "{{paperId}}",
+                "publish"
+              ]
+            },
+            "description": "review \u2192 published; the item becomes publicly listable and is indexed for RAG."
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Student Projects",
+      "description": "Project showcase with staff approval.",
+      "item": [
+        {
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects?q=flutter&year=2026&tech=react&page=1&per_page=12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "flutter"
+                },
+                {
+                  "key": "year",
+                  "value": "2026"
+                },
+                {
+                  "key": "tech",
+                  "value": "react"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "12"
+                }
+              ]
+            },
+            "description": "Student project showcase. `tech` filters on the keywords array \u2014 the tech-stack facet is derived from keywords, not a separate column.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get project",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Single project with links and team.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Submit project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": "Students submit; `academic_year` is CHECK-constrained to 2000\u20132100. Starts unapproved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"CSEDU Digital Knowledge Platform\",\n  \"team_members\": [\n    \"Mehedi Hasan Sakib\",\n    \"Sumaiya Tabassum\",\n    \"Md. Abu Kawser\"\n  ],\n  \"academic_year\": 2026,\n  \"course_code\": \"CSE 4113\",\n  \"abstract\": \"A unified academic knowledge platform with a RAG AI agent.\",\n  \"keywords\": [\n    \"nextjs\",\n    \"golang\",\n    \"postgresql\",\n    \"rag\"\n  ],\n  \"web_url\": \"https://devops.farefin.com\",\n  \"github_repo\": \"https://github.com/Mayamoho/CSEDU-Digital-Knowledge-Platform-main\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update project",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Owner edit before approval.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"CSEDU Digital Knowledge Platform (final)\",\n  \"keywords\": [\n    \"nextjs\",\n    \"golang\",\n    \"rag\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Approve project (staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "approve"
+              ]
+            },
+            "description": "Librarian/administrator gate before a project appears publicly. Records approved_by/at.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"notes\": \"Approved for the public showcase.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. AI Assistant (RAG)",
+      "description": "Hybrid-retrieval RAG chat, SSE streaming, per-document summarisation.",
+      "item": [
+        {
+          "name": "Chat (blocking)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "chat"
+              ]
+            },
+            "description": "RAG query (SDD Flow 2). The Go API attaches the caller's role tier, the Python service embeds the query with MiniLM, runs hybrid retrieval (pgvector cosine + PostgreSQL FTS) fused by reciprocal rank, and sends the grounded context to Groq \u2014 falling back to Gemini on failure. Rows the caller may not read are filtered out before the LLM sees them, so the model cannot leak restricted documents. Identical queries are cached in Redis for 5 minutes to protect the free-tier quota.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Which books do we have on compiler design?\",\n  \"session_id\": \"{{sessionId}}\",\n  \"language\": \"en\",\n  \"rewrite_query\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Chat (SSE stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/chat/stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "chat",
+                "stream"
+              ]
+            },
+            "description": "Same pipeline, streamed as Server-Sent Events so tokens render progressively. This is the platform's real-time transport \u2014 nginx keeps a 30s timeout on /api/v1/ai/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Summarise the research on Bangla NLP in this archive.\",\n  \"session_id\": \"{{sessionId}}\",\n  \"language\": \"en\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Chat history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ai/chat/history/{{sessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "chat",
+                "history",
+                "{{sessionId}}"
+              ]
+            },
+            "description": "Multi-turn history for a session from `ai_chat_messages`, including the model used and cited source document IDs."
+          }
+        },
+        {
+          "name": "Summarize document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ai",
+                "summarize"
+              ]
+            },
+            "description": "Per-resource AI summary of an indexed document. `language: bn` returns Bangla.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"item_id\": \"{{itemId}}\",\n  \"language\": \"en\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Reviews & Ratings",
+      "description": "1\u20135 star ratings and comments on any resource.",
+      "item": [
+        {
+          "name": "List reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "{{itemId}}"
+              ]
+            },
+            "description": "Public ratings + comments for a resource, with the aggregate average.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create/update review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reviews/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reviews",
+                "{{itemId}}"
+              ]
+            },
+            "description": "One review per user per item (`UNIQUE(item_id, user_id)`); posting again updates the existing row. Rating is CHECK-constrained to 1\u20135. Notifies the resource owner.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"body\": \"Extremely useful for the compiler course.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Notifications",
+      "description": "In-app notification feed.",
+      "item": [
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            },
+            "description": "In-app feed (hold available, review decision, role decision, overdue). The bell polls this endpoint \u2014 there is no WebSocket."
+          }
+        },
+        {
+          "name": "Mark read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            },
+            "description": "Marks one notification read."
+          }
+        },
+        {
+          "name": "Mark all read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Clears the unread badge."
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Role Requests",
+      "description": "Verified role-upgrade requests with university ID evidence.",
+      "item": [
+        {
+          "name": "Request role upgrade",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/role-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "role-requests"
+              ]
+            },
+            "description": "Any authenticated user. `university_id` and `evidence_url` are mandatory \u2014 a partial unique index allows only one pending request per user.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requested_role\": \"researcher\",\n  \"justification\": \"Faculty member, MSc supervisor.\",\n  \"university_id\": \"2021-511-189\",\n  \"evidence_url\": \"uploads/id-cards/xyz.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload evidence",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/role-requests/evidence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "role-requests",
+                "evidence"
+              ]
+            },
+            "description": "Uploads the ID card and returns the `evidence_url` to attach to the request.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Photo/scan of the university ID card"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "My role requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/role-requests/mine",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "role-requests",
+                "mine"
+              ]
+            },
+            "description": "Status of the caller's own requests."
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Admin",
+      "description": "User management, CSV import/export, moderation, audit log, role decisions.",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users?q=&page=1&per_page=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Researcher/librarian/administrator. Member directory."
+          }
+        },
+        {
+          "name": "Export catalog CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/catalog/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "catalog",
+                "export"
+              ]
+            },
+            "description": "Streams the whole catalog as CSV for offline editing."
+          }
+        },
+        {
+          "name": "Import catalog CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/catalog/import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "catalog",
+                "import"
+              ]
+            },
+            "description": "Bulk upsert keyed on ISBN. Rows without an ISBN are inserted; rows with one update the existing record.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "CSV matching bulk_books_upload.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update media status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/media/{{itemId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "media",
+                "{{itemId}}",
+                "status"
+              ]
+            },
+            "description": "Moderation: draft | review | published | archived.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"published\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update user role (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{targetUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{targetUserId}}",
+                "role"
+              ]
+            },
+            "description": "Administrator only \u2014 the single legitimate path to a privileged role. Self-service escalation through /auth/register is blocked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_tier\": \"librarian\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Audit log (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-log?page=1&per_page=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-log"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Append-only audit trail (row-level security allows INSERT only). Retained \u2265 90 days."
+          }
+        },
+        {
+          "name": "Role requests queue (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/role-requests?status=pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "role-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                }
+              ]
+            },
+            "description": "Pending role-upgrade requests with university ID and uploaded evidence."
+          }
+        },
+        {
+          "name": "Role request evidence (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/role-requests/{{roleRequestId}}/evidence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "role-requests",
+                "{{roleRequestId}}",
+                "evidence"
+              ]
+            },
+            "description": "Streams the applicant's uploaded ID card for verification."
+          }
+        },
+        {
+          "name": "Decide role request (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/role-requests/{{roleRequestId}}/decide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "role-requests",
+                "{{roleRequestId}}",
+                "decide"
+              ]
+            },
+            "description": "Approving promotes the user and notifies them in-app + by email.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true,\n  \"notes\": \"University ID verified against the department roll.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Ops",
+      "description": "Public health probe.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Public liveness probe. Returns `{\"status\":\"ok\",\"service\":\"csedu-api\",\"version\":\"v1\"}`. Used by Docker healthchecks, the deploy script and external uptime monitoring.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Ops (internal only)",
+      "description": "Root-level health and the Prometheus scrape endpoint. These live on the server root, outside /api/v1, and are only reachable from inside the Docker network \u2014 nginx does not proxy them. Set `rootUrl` to http://localhost:8080 and run them from the VM.",
+      "item": [
+        {
+          "name": "Health check (root, internal)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rootUrl}}/health",
+              "host": [
+                "{{rootUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Original root-level probe. Reachable only from inside the Docker network or the VM (`curl localhost:8080/health`) \u2014 nginx proxies `/api/v1/` only. Point `rootUrl` at http://localhost:8080 when running these from the server.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Prometheus metrics (internal)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rootUrl}}/metrics",
+              "host": [
+                "{{rootUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "Prometheus scrape target \u2014 `infra/prometheus` scrapes `api:8080/metrics` over the private Docker network. Request counts, latency histograms and status-code series per route. Deliberately NOT exposed publicly.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://devops.farefin.com/api/v1"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@cs.du.ac.bd"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Admin@12345"
+    },
+    {
+      "key": "librarianEmail",
+      "value": "librarian@cs.du.ac.bd"
+    },
+    {
+      "key": "librarianPassword",
+      "value": "Librarian@12345"
+    },
+    {
+      "key": "studentEmail",
+      "value": "student@cs.du.ac.bd"
+    },
+    {
+      "key": "studentPassword",
+      "value": "Student@12345"
+    },
+    {
+      "key": "catalogId",
+      "value": ""
+    },
+    {
+      "key": "itemId",
+      "value": ""
+    },
+    {
+      "key": "loanId",
+      "value": ""
+    },
+    {
+      "key": "holdId",
+      "value": ""
+    },
+    {
+      "key": "fineId",
+      "value": ""
+    },
+    {
+      "key": "paymentSessionId",
+      "value": ""
+    },
+    {
+      "key": "paperId",
+      "value": ""
+    },
+    {
+      "key": "projectId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": "11111111-1111-1111-1111-111111111111"
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "roleRequestId",
+      "value": ""
+    },
+    {
+      "key": "targetUserId",
+      "value": ""
+    },
+    {
+      "key": "rootUrl",
+      "value": "http://localhost:8080"
+    }
+  ]
+}

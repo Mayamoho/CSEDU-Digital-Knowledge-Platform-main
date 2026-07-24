@@ -1,0 +1,251 @@
+%% CSEDU Digital Knowledge Platform — Entity Relationship Diagram
+%% Source of truth: infra/db/init.sql + infra/db/migrations/001..014
+%% PostgreSQL 16 + pgvector. 19 tables, 7 native ENUM types.
+erDiagram
+    users ||--o{ media_items          : "creates"
+    users ||--o{ library_catalog      : "catalogues"
+    users ||--o{ loans                : "borrows"
+    users ||--o{ fines                : "owes"
+    users ||--o{ payments             : "pays"
+    users ||--o{ holds                : "reserves"
+    users ||--o{ refresh_tokens       : "holds session"
+    users ||--o{ ai_chat_messages     : "asks"
+    users ||--o{ audit_log            : "acts in"
+    users ||--o{ role_requests        : "requests upgrade"
+    users ||--o{ notifications        : "receives"
+    users ||--o{ resource_reviews     : "reviews"
+    users ||--o{ payment_sessions     : "initiates"
+    users ||--o{ research_papers      : "reviews paper"
+    users ||--o{ student_projects     : "supervises / approves"
+
+    media_items ||--|| media_metadata    : "has 1:1"
+    media_items ||--o{ vector_embeddings : "chunked into"
+    media_items ||--|| rag_index_state   : "index state 1:1"
+    media_items ||--o| research_papers   : "specialises 1:1"
+    media_items ||--o| student_projects  : "specialises 1:1"
+    media_items ||--o{ resource_reviews  : "rated by"
+
+    library_catalog ||--o{ loans : "lent as"
+    library_catalog ||--o{ holds : "reserved as"
+
+    loans ||--o| fines            : "accrues 0..1"
+    fines ||--o{ payments         : "settled by"
+    fines ||--o{ payment_sessions : "gateway attempt"
+
+    users {
+        UUID        user_id PK "gen_random_uuid()"
+        TEXT        email UK "NOT NULL, unique"
+        TEXT        name "NOT NULL"
+        TEXT        password_hash "NULL for SSO/magic-link users, bcrypt cost 12"
+        role_tier   role_tier "ENUM public|student|researcher|librarian|administrator"
+        TEXT        barcode UK "M-xxxxxxxx, trigger-assigned"
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ last_login "NULL = never"
+    }
+
+    media_items {
+        UUID        item_id PK
+        TEXT        title "NOT NULL"
+        TEXT        item_type "CHECK archive|research|project"
+        TEXT        format "CHECK pdf|video|image|audio|docx|..."
+        item_status status "ENUM draft|review|published|archived"
+        access_tier access_tier "ENUM public|student|researcher|librarian|restricted"
+        UUID        created_by FK "users, ON DELETE SET NULL"
+        TEXT        file_path "NULL for metadata-only or external items"
+        TEXT        external_url "YouTube / external link"
+        TEXT        ingestion_status "NULL|indexed|failed"
+        TEXT        ingestion_error
+        TIMESTAMPTZ upload_date
+    }
+
+    media_metadata {
+        UUID     meta_id PK
+        UUID     item_id FK,UK "1:1 with media_items, ON DELETE CASCADE"
+        TEXT_ARR tags
+        TEXT     abstract
+        TEXT_ARR keywords
+        TEXT     language "en | bn"
+        TSVECTOR fts "trigger-maintained, GIN index"
+    }
+
+    library_catalog {
+        UUID        catalog_id PK
+        TEXT        title "NOT NULL, GIN FTS index"
+        TEXT        author "NOT NULL, GIN FTS index"
+        TEXT        isbn UK "partial unique WHERE isbn IS NOT NULL"
+        TEXT        topic "facet, indexed"
+        TEXT        format "book | journal | thesis"
+        TEXT        location "shelf code"
+        TEXT        cover_image
+        INT         year
+        INT         total_copies
+        INT         available_copies
+        TEXT        barcode UK "B-xxxxxxxx, trigger-assigned"
+        UUID        created_by FK "users"
+        TIMESTAMPTZ created_at
+    }
+
+    loans {
+        UUID        loan_id PK
+        UUID        user_id FK "users, ON DELETE RESTRICT"
+        UUID        catalog_id FK "library_catalog, ON DELETE RESTRICT"
+        TIMESTAMPTZ checkout_date
+        TIMESTAMPTZ due_date "NOT NULL, CHECK due_date > checkout_date"
+        TIMESTAMPTZ return_date "NULL = currently borrowed"
+        loan_status status "ENUM active|returned|overdue"
+    }
+
+    fines {
+        UUID          fine_id PK
+        UUID          loan_id FK,UK "UNIQUE(loan_id) - idempotent nightly cron"
+        UUID          user_id FK
+        NUMERIC       amount "NUMERIC(10,2), CHECK amount > 0 - never FLOAT"
+        fine_status   status "ENUM pending|paid|waived"
+        TIMESTAMPTZ   calculated_at
+    }
+
+    payments {
+        UUID           payment_id PK
+        UUID           fine_id FK "NOT NULL - no orphan payments"
+        UUID           user_id FK
+        NUMERIC        amount "CHECK amount > 0"
+        TEXT           method "bkash | nagad | cash | card"
+        payment_status status "ENUM pending|successful|failed"
+        UUID           confirmed_by FK "librarian who took the cash"
+        TIMESTAMPTZ    paid_at
+    }
+
+    payment_sessions {
+        UUID        session_id PK
+        UUID        fine_id FK "partial UNIQUE while unsettled"
+        UUID        user_id FK
+        TEXT        method "bkash | nagad | cash"
+        TEXT        account_number "payer wallet, stored masked"
+        NUMERIC     amount "CHECK amount > 0"
+        TEXT        otp_code "simulated gateway OTP"
+        TIMESTAMPTZ otp_expires_at
+        INT         attempts
+        TEXT        status "pending|otp_sent|awaiting_counter|completed|failed|cancelled"
+        UUID        confirmed_by FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ completed_at
+    }
+
+    holds {
+        UUID        hold_id PK
+        UUID        user_id FK "ON DELETE CASCADE"
+        UUID        catalog_id FK "ON DELETE CASCADE"
+        TIMESTAMPTZ placed_at
+        TIMESTAMPTZ notified_at "NULL until the copy becomes available"
+        TIMESTAMPTZ expires_at
+        hold_status status "ENUM active|fulfilled|cancelled"
+    }
+
+    research_papers {
+        UUID        paper_id PK
+        UUID        item_id FK,UK "1:1 with media_items, ON DELETE CASCADE"
+        TEXT_ARR    authors
+        TEXT_ARR    co_authors
+        DATE        publication_date
+        TEXT        doi
+        TEXT        journal
+        TEXT        conference
+        UUID        reviewer_id FK "users"
+        TEXT        review_notes
+        TIMESTAMPTZ reviewed_at
+        TIMESTAMPTZ submitted_at
+    }
+
+    student_projects {
+        UUID        project_id PK
+        UUID        item_id FK,UK "1:1 with media_items"
+        TEXT_ARR    team_members
+        UUID        supervisor_id FK "users"
+        INT         academic_year "CHECK between 2000 and 2100"
+        TEXT        course_code
+        TEXT        web_url
+        TEXT        github_repo
+        TEXT        app_download
+        UUID        approved_by FK "users"
+        TIMESTAMPTZ approved_at
+        TIMESTAMPTZ submitted_at
+    }
+
+    vector_embeddings {
+        UUID   embedding_id PK
+        UUID   item_id FK "ON DELETE CASCADE"
+        INT    chunk_index "CHECK >= 0, UNIQUE(item_id, chunk_index)"
+        TEXT   chunk_text
+        VECTOR embedding "vector(768), HNSW m=16 ef_construction=64"
+    }
+
+    rag_index_state {
+        UUID        item_id PK,FK "1:1 with media_items"
+        TEXT        content_hash "skips re-embedding unchanged files"
+        INT         chunk_count
+        TIMESTAMPTZ indexed_at
+    }
+
+    ai_chat_messages {
+        UUID        message_id PK
+        UUID        session_id "groups a conversation, indexed"
+        UUID        user_id FK "ON DELETE SET NULL"
+        TEXT        query "CHECK char_length(query) <= 5000"
+        TEXT        response
+        UUID_ARR    source_doc_ids "citations"
+        TEXT        model_used "NOT NULL - which Groq/Gemini tier answered"
+        TIMESTAMPTZ created_at
+    }
+
+    resource_reviews {
+        UUID        review_id PK
+        UUID        item_id "UNIQUE(item_id, user_id)"
+        UUID        user_id
+        INT         rating "CHECK between 1 and 5"
+        TEXT        body
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    role_requests {
+        UUID        request_id PK
+        UUID        user_id FK "partial UNIQUE WHERE status='pending'"
+        role_tier   requested_role
+        TEXT        justification
+        TEXT        university_id "verification evidence (migration 014)"
+        TEXT        evidence_url "uploaded ID-card scan"
+        TEXT        status "pending|approved|rejected"
+        UUID        decided_by FK "administrator"
+        TEXT        decision_notes
+        TIMESTAMPTZ decided_at
+        TIMESTAMPTZ created_at
+    }
+
+    notifications {
+        UUID        notification_id PK
+        UUID        user_id FK "ON DELETE CASCADE"
+        TEXT        title
+        TEXT        body
+        TEXT        link "deep link into the app"
+        BOOLEAN     read
+        TIMESTAMPTZ created_at
+    }
+
+    refresh_tokens {
+        UUID        token_id PK
+        UUID        user_id FK "ON DELETE CASCADE"
+        TEXT        token_hash UK "hash only - raw token never stored"
+        TIMESTAMPTZ expires_at "7 days"
+        BOOLEAN     revoked "server-side logout"
+        TIMESTAMPTZ created_at
+    }
+
+    audit_log {
+        UUID        log_id PK
+        UUID        actor_id FK "NULL = system/cron action"
+        TEXT        action
+        TEXT        resource_type
+        UUID        resource_id
+        TEXT        ip_addr
+        TIMESTAMPTZ created_at "append-only, RLS INSERT-only policy"
+    }

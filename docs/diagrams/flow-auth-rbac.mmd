@@ -1,0 +1,41 @@
+%% SDD Flow 4 — Authentication paths and RBAC enforcement
+flowchart TD
+    start(["Visitor"]) --> choice{"Sign-in method"}
+
+    choice -->|"email + password"| pw["POST /auth/login"]
+    choice -->|"Continue with Google"| g1["GET /auth/google/login"]
+    choice -->|"email me a link<br/>(also = forgot password)"| m1["POST /auth/magic/request"]
+    choice -->|"browse anonymously"| anon["OptionalAuth routes<br/>public rows only"]
+
+    pw --> lock{"5 failed attempts<br/>in the window?"}
+    lock -->|yes| locked["423 locked for 15 min"]
+    lock -->|no| verify["bcrypt compare (cost 12)"]
+    verify -->|mismatch| fail["401 invalid credentials<br/>increment counter"]
+    verify -->|match| issue
+
+    g1 --> g2["Google consent screen"] --> g3["GET /auth/google/callback?code"]
+    g3 --> g4["exchange code, find-or-create user by email<br/>password_hash stays NULL"] --> issue
+
+    m1 --> m2["single-use token in Redis<br/>emailed over SMTP"] --> m3["GET /auth/magic/verify?token"] --> issue
+
+    issue["Issue tokens"] --> jwt["access JWT — 1 hour<br/>claims: user_id, role_tier, exp, jti"]
+    issue --> rt["refresh token — 7 days<br/>only the hash is stored in refresh_tokens"]
+
+    jwt --> apicall["Any /api/v1 request<br/>Authorization: Bearer &lt;jwt&gt;"]
+    apicall --> mw["middleware.Authenticate<br/>verify HS256 signature + expiry"]
+    mw -->|invalid| r401["401"]
+    mw -->|valid| role["middleware.RequireRole(...)<br/>role read from the SIGNED TOKEN,<br/>never from the request body"]
+    role -->|not permitted| r403["403 — UI also hides the control"]
+    role -->|permitted| handler["Handler executes<br/>+ audit_log row"]
+
+    rt --> refresh["POST /auth/refresh"] --> revoked{"revoked or expired?"}
+    revoked -->|yes| r401
+    revoked -->|no| issue
+    handler --> logout["POST /auth/logout<br/>revoked = true (server-side kill)"]
+
+    subgraph escalation["Role escalation — the only legitimate path"]
+        reg["POST /auth/register<br/>role_tier FORCED to 'student'<br/>client-supplied role ignored"]
+        rr["POST /role-requests<br/>+ university_id + ID-card evidence"]
+        adm["Administrator reviews evidence<br/>POST /admin/role-requests/{id}/decide"]
+        reg --> rr --> adm --> promoted["role_tier updated + user notified"]
+    end

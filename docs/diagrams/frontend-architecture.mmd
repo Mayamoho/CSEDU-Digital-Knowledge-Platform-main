@@ -1,0 +1,53 @@
+%% Frontend architecture — Next.js 15 App Router, route groups, state and data access
+flowchart TB
+    subgraph shell["app/layout.tsx — root shell"]
+        prov["Providers: ThemeProvider · AuthProvider (React Context) · I18nProvider (EN/বাংলা)"]
+    end
+
+    subgraph rg1["(auth) route group — minimal layout, no chrome"]
+        login["/login"]
+        reg["/register"]
+        fp["/forgot-password — magic link"]
+        cb["/callback — OAuth + magic-link token landing"]
+    end
+
+    subgraph rg2["(main) route group — header, footer, command palette, scroll progress"]
+        home["/ — landing"]
+        cat["/catalog · /catalog/[itemId]"]
+        arc["/archive · /archive/[itemId]"]
+        res["/research · /research/[itemId]"]
+        proj["/projects · /projects/[itemId]"]
+        up["/upload · /upload/archive · /upload/research · /upload/projects"]
+        me["/dashboard · /profile · /settings · /my-uploads · /notifications"]
+        lib["/loans · /fines · /role-request"]
+        adm["/admin/users · /admin/circulation · /admin/role-requests"]
+    end
+
+    subgraph comp["components/ — feature-sliced, shadcn/ui + Radix + Tailwind primitives"]
+        f1["catalog · archive · research · projects"]
+        f2["loans · fines · admin · uploads"]
+        f3["ai-chat (SSE reader) · reviews · notifications"]
+        f4["ui/ — 40+ shadcn primitives · shared/ — HierarchyFilter, Pager, ModuleHero"]
+    end
+
+    subgraph state["State management — no Redux/Zustand, deliberately"]
+        s1["AuthProvider (Context): user, role_tier, tokens, silent refresh"]
+        s2["I18nProvider (Context): language + DOM text-node translation walker"]
+        s3["Server components: data fetched per request, no client cache to invalidate"]
+        s4["useState / useForm (react-hook-form + zod) for local form state"]
+        s5["use-form-draft.ts: localStorage persistence for long upload forms"]
+    end
+
+    api["lib/api.ts — single typed fetch wrapper<br/>attaches Bearer token, normalises {error} responses,<br/>NEXT_PUBLIC_API_URL = /api/v1 (same origin through nginx)"]
+
+    shell --> rg1
+    shell --> rg2
+    rg2 --> comp
+    rg1 --> comp
+    comp --> api
+    prov --> state
+    state --> api
+    api -->|HTTPS JSON| go["Go API /api/v1"]
+
+    note["Rendering strategy: public discovery pages (catalog, archive, research, projects)<br/>render on the server for SEO and first-paint; authenticated dashboards and the AI<br/>widget are client components. Dynamic segments [itemId] are server-rendered per request<br/>because access tier depends on the caller."]
+    note ~~~ shell

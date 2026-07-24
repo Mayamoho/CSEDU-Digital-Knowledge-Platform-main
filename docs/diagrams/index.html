@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CSEDU Digital Knowledge Platform — Report Diagrams</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2rem clamp(1rem, 4vw, 4rem); font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; background: #f6f7f9; color: #16191d; }
+  header { max-width: 1100px; margin: 0 auto 2rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .3rem; }
+  .sub { color: #5a6472; margin: 0 0 1.2rem; }
+  nav ol { columns: 2; gap: 2rem; padding-left: 1.2rem; margin: 0; }
+  nav a { color: #1a56b8; text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  section { max-width: 1400px; margin: 0 auto 3rem; }
+  h2 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  .cap { margin: 0 0 .8rem; color: #5a6472; font-size: .92rem; }
+  .src { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; color: #8b95a4; }
+  .frame { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 1.2rem; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .mermaid { margin: 0; }
+  .hint { max-width: 1100px; margin: 0 auto 2rem; padding: .9rem 1.1rem; background: #fff8e1; border: 1px solid #f0d98a; border-radius: 8px; font-size: .92rem; }
+  @media print { .hint, nav { display: none; } section { page-break-inside: avoid; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>CSEDU Digital Knowledge Platform — Report Diagrams</h1>
+  <p class="sub">CSE 4113 Internet Programming Lab · Team Devops · figures for the project report</p>
+  <div class="hint"><strong>To put a figure in the report:</strong> right-click a rendered diagram → <em>Save image as…</em> (Mermaid renders inline SVG, which scales cleanly in Word), or screenshot at full browser zoom. Diagram sources live in <code>docs/diagrams/*.mmd</code> and are versioned with the code, so figures can be regenerated whenever the system changes. Requires an internet connection on first load (Mermaid is fetched from a CDN).</div>
+  <nav><ol><li><a href="#architecture">Figure 1 — High-Level System Architecture</a></li><li><a href="#frontend-architecture">Figure 2 — Frontend Architecture</a></li><li><a href="#erd">Figure 3 — Entity Relationship Diagram</a></li><li><a href="#data-sync">Figure 4 — Data Sync Mechanics</a></li><li><a href="#flow-upload-ingestion">Figure 5 — Flow 1: Upload → RAG Ingestion</a></li><li><a href="#flow-rag-query">Figure 6 — Flow 2: RAG Query with Access Control</a></li><li><a href="#flow-borrow-fine">Figure 7 — Flow 3: Barcode Borrow and the Fine Cycle</a></li><li><a href="#flow-auth-rbac">Figure 8 — Flow 4: Authentication and RBAC</a></li><li><a href="#cicd-pipeline">Figure 9 — CI/CD Pipeline</a></li></ol></nav>
+</header>
+  <section id="architecture">
+    <h2>Figure 1 — High-Level System Architecture</h2>
+    <p class="cap">Report §2.1. Layered modular monolith: one public entry point, private Docker network, free-tier external services. <span class="src">docs/diagrams/architecture.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% CSEDU Digital Knowledge Platform — High-Level / Deployment Architecture
+%% Layered modular monolith. One public entry point (host nginx :443 -&gt; docker nginx :8080).
+flowchart TB
+    subgraph client[&quot;Client&quot;]
+        browser[&quot;Browser&lt;br/&gt;desktop + mobile&quot;]
+        scanner[&quot;HID barcode scanner&lt;br/&gt;(keyboard emulation)&quot;]
+    end
+
+    subgraph host[&quot;Azure VM — ip-lab-student-03 (4 GiB, shared with other teams)&quot;]
+        hostnginx[&quot;Host nginx + certbot TLS&lt;br/&gt;devops.farefin.com :443&quot;]
+
+        subgraph dockernet[&quot;Private Docker network — only host port 8080 published&quot;]
+            nginx[&quot;nginx (csedu_nginx) :8080&lt;br/&gt;/ -&gt; frontend&lt;br/&gt;/api/v1/ -&gt; api&lt;br/&gt;/api/v1/ai/ -&gt; api (30s timeout)&quot;]
+            fe[&quot;Next.js 15 frontend :3000&lt;br/&gt;App Router, RSC + SSR&lt;br/&gt;standalone output&quot;]
+            api[&quot;Go API :8080&lt;br/&gt;chi router, modular monolith&lt;br/&gt;auth · library · loan · fine · media&lt;br/&gt;research · projects · reviews&lt;br/&gt;roles · notify · admin · ai&quot;]
+            rag[&quot;Python FastAPI RAG :8001&lt;br/&gt;MiniLM embed · hybrid retrieve&lt;br/&gt;rerank · LLM call · SSE stream&quot;]
+            ingest[&quot;Ingestion worker (Go)&lt;br/&gt;extract -&gt; chunk 512/50 -&gt; embed&quot;]
+            finew[&quot;Fine worker (Go cron)&lt;br/&gt;nightly overdue calculation&quot;]
+            pg[(&quot;PostgreSQL 16 + pgvector :5432&lt;br/&gt;19 tables · HNSW index · FTS&quot;)]
+            redis[(&quot;Redis :6379&lt;br/&gt;job queue · AI cache 5 min&lt;br/&gt;magic-link tokens&quot;)]
+            minio[(&quot;MinIO :9000&lt;br/&gt;S3-compatible object store&quot;)]
+            prom[&quot;Prometheus&lt;br/&gt;scrapes api:8080/metrics&quot;]
+        end
+    end
+
+    subgraph ext[&quot;External services (free tier)&quot;]
+        groq[&quot;Groq API&lt;br/&gt;llama-3.1-8b · llama-3.3-70b · gpt-oss-120b&quot;]
+        gemini[&quot;Google Gemini 2.5 Flash&lt;br/&gt;fallback + query rewrite&quot;]
+        google[&quot;Google OAuth 2.0&quot;]
+        smtp[&quot;Brevo SMTP&lt;br/&gt;notifications + magic links&quot;]
+    end
+
+    browser --&gt;|HTTPS| hostnginx
+    scanner -.-&gt;|keystrokes| browser
+    hostnginx --&gt;|proxy_pass :8080| nginx
+    nginx --&gt; fe
+    nginx --&gt; api
+    fe --&gt;|&quot;REST /api/v1&quot;| nginx
+
+    api --&gt; pg
+    api --&gt; redis
+    api --&gt; minio
+    api --&gt;|&quot;POST /query, SSE&quot;| rag
+    api --&gt; google
+    api --&gt; smtp
+
+    redis --&gt;|job| ingest
+    ingest --&gt; minio
+    ingest --&gt; pg
+    finew --&gt; pg
+    finew --&gt; smtp
+
+    rag --&gt; pg
+    rag --&gt;|primary| groq
+    rag -.-&gt;|on failure| gemini
+
+    prom --&gt; api
+</pre></div>
+  </section>
+  <section id="frontend-architecture">
+    <h2>Figure 2 — Frontend Architecture</h2>
+    <p class="cap">Report §2.2. Next.js 15 App Router route groups, component slices, and the Context-based state model. <span class="src">docs/diagrams/frontend-architecture.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% Frontend architecture — Next.js 15 App Router, route groups, state and data access
+flowchart TB
+    subgraph shell[&quot;app/layout.tsx — root shell&quot;]
+        prov[&quot;Providers: ThemeProvider · AuthProvider (React Context) · I18nProvider (EN/বাংলা)&quot;]
+    end
+
+    subgraph rg1[&quot;(auth) route group — minimal layout, no chrome&quot;]
+        login[&quot;/login&quot;]
+        reg[&quot;/register&quot;]
+        fp[&quot;/forgot-password — magic link&quot;]
+        cb[&quot;/callback — OAuth + magic-link token landing&quot;]
+    end
+
+    subgraph rg2[&quot;(main) route group — header, footer, command palette, scroll progress&quot;]
+        home[&quot;/ — landing&quot;]
+        cat[&quot;/catalog · /catalog/[itemId]&quot;]
+        arc[&quot;/archive · /archive/[itemId]&quot;]
+        res[&quot;/research · /research/[itemId]&quot;]
+        proj[&quot;/projects · /projects/[itemId]&quot;]
+        up[&quot;/upload · /upload/archive · /upload/research · /upload/projects&quot;]
+        me[&quot;/dashboard · /profile · /settings · /my-uploads · /notifications&quot;]
+        lib[&quot;/loans · /fines · /role-request&quot;]
+        adm[&quot;/admin/users · /admin/circulation · /admin/role-requests&quot;]
+    end
+
+    subgraph comp[&quot;components/ — feature-sliced, shadcn/ui + Radix + Tailwind primitives&quot;]
+        f1[&quot;catalog · archive · research · projects&quot;]
+        f2[&quot;loans · fines · admin · uploads&quot;]
+        f3[&quot;ai-chat (SSE reader) · reviews · notifications&quot;]
+        f4[&quot;ui/ — 40+ shadcn primitives · shared/ — HierarchyFilter, Pager, ModuleHero&quot;]
+    end
+
+    subgraph state[&quot;State management — no Redux/Zustand, deliberately&quot;]
+        s1[&quot;AuthProvider (Context): user, role_tier, tokens, silent refresh&quot;]
+        s2[&quot;I18nProvider (Context): language + DOM text-node translation walker&quot;]
+        s3[&quot;Server components: data fetched per request, no client cache to invalidate&quot;]
+        s4[&quot;useState / useForm (react-hook-form + zod) for local form state&quot;]
+        s5[&quot;use-form-draft.ts: localStorage persistence for long upload forms&quot;]
+    end
+
+    api[&quot;lib/api.ts — single typed fetch wrapper&lt;br/&gt;attaches Bearer token, normalises {error} responses,&lt;br/&gt;NEXT_PUBLIC_API_URL = /api/v1 (same origin through nginx)&quot;]
+
+    shell --&gt; rg1
+    shell --&gt; rg2
+    rg2 --&gt; comp
+    rg1 --&gt; comp
+    comp --&gt; api
+    prov --&gt; state
+    state --&gt; api
+    api --&gt;|HTTPS JSON| go[&quot;Go API /api/v1&quot;]
+
+    note[&quot;Rendering strategy: public discovery pages (catalog, archive, research, projects)&lt;br/&gt;render on the server for SEO and first-paint; authenticated dashboards and the AI&lt;br/&gt;widget are client components. Dynamic segments [itemId] are server-rendered per request&lt;br/&gt;because access tier depends on the caller.&quot;]
+    note ~~~ shell
+</pre></div>
+  </section>
+  <section id="erd">
+    <h2>Figure 3 — Entity Relationship Diagram</h2>
+    <p class="cap">Report §2.4. 19 tables, 7 PostgreSQL ENUM types. Source of truth: infra/db/init.sql plus migrations 001–014. <span class="src">docs/diagrams/erd.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% CSEDU Digital Knowledge Platform — Entity Relationship Diagram
+%% Source of truth: infra/db/init.sql + infra/db/migrations/001..014
+%% PostgreSQL 16 + pgvector. 19 tables, 7 native ENUM types.
+erDiagram
+    users ||--o{ media_items          : &quot;creates&quot;
+    users ||--o{ library_catalog      : &quot;catalogues&quot;
+    users ||--o{ loans                : &quot;borrows&quot;
+    users ||--o{ fines                : &quot;owes&quot;
+    users ||--o{ payments             : &quot;pays&quot;
+    users ||--o{ holds                : &quot;reserves&quot;
+    users ||--o{ refresh_tokens       : &quot;holds session&quot;
+    users ||--o{ ai_chat_messages     : &quot;asks&quot;
+    users ||--o{ audit_log            : &quot;acts in&quot;
+    users ||--o{ role_requests        : &quot;requests upgrade&quot;
+    users ||--o{ notifications        : &quot;receives&quot;
+    users ||--o{ resource_reviews     : &quot;reviews&quot;
+    users ||--o{ payment_sessions     : &quot;initiates&quot;
+    users ||--o{ research_papers      : &quot;reviews paper&quot;
+    users ||--o{ student_projects     : &quot;supervises / approves&quot;
+
+    media_items ||--|| media_metadata    : &quot;has 1:1&quot;
+    media_items ||--o{ vector_embeddings : &quot;chunked into&quot;
+    media_items ||--|| rag_index_state   : &quot;index state 1:1&quot;
+    media_items ||--o| research_papers   : &quot;specialises 1:1&quot;
+    media_items ||--o| student_projects  : &quot;specialises 1:1&quot;
+    media_items ||--o{ resource_reviews  : &quot;rated by&quot;
+
+    library_catalog ||--o{ loans : &quot;lent as&quot;
+    library_catalog ||--o{ holds : &quot;reserved as&quot;
+
+    loans ||--o| fines            : &quot;accrues 0..1&quot;
+    fines ||--o{ payments         : &quot;settled by&quot;
+    fines ||--o{ payment_sessions : &quot;gateway attempt&quot;
+
+    users {
+        UUID        user_id PK &quot;gen_random_uuid()&quot;
+        TEXT        email UK &quot;NOT NULL, unique&quot;
+        TEXT        name &quot;NOT NULL&quot;
+        TEXT        password_hash &quot;NULL for SSO/magic-link users, bcrypt cost 12&quot;
+        role_tier   role_tier &quot;ENUM public|student|researcher|librarian|administrator&quot;
+        TEXT        barcode UK &quot;M-xxxxxxxx, trigger-assigned&quot;
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ last_login &quot;NULL = never&quot;
+    }
+
+    media_items {
+        UUID        item_id PK
+        TEXT        title &quot;NOT NULL&quot;
+        TEXT        item_type &quot;CHECK archive|research|project&quot;
+        TEXT        format &quot;CHECK pdf|video|image|audio|docx|...&quot;
+        item_status status &quot;ENUM draft|review|published|archived&quot;
+        access_tier access_tier &quot;ENUM public|student|researcher|librarian|restricted&quot;
+        UUID        created_by FK &quot;users, ON DELETE SET NULL&quot;
+        TEXT        file_path &quot;NULL for metadata-only or external items&quot;
+        TEXT        external_url &quot;YouTube / external link&quot;
+        TEXT        ingestion_status &quot;NULL|indexed|failed&quot;
+        TEXT        ingestion_error
+        TIMESTAMPTZ upload_date
+    }
+
+    media_metadata {
+        UUID     meta_id PK
+        UUID     item_id FK,UK &quot;1:1 with media_items, ON DELETE CASCADE&quot;
+        TEXT_ARR tags
+        TEXT     abstract
+        TEXT_ARR keywords
+        TEXT     language &quot;en | bn&quot;
+        TSVECTOR fts &quot;trigger-maintained, GIN index&quot;
+    }
+
+    library_catalog {
+        UUID        catalog_id PK
+        TEXT        title &quot;NOT NULL, GIN FTS index&quot;
+        TEXT        author &quot;NOT NULL, GIN FTS index&quot;
+        TEXT        isbn UK &quot;partial unique WHERE isbn IS NOT NULL&quot;
+        TEXT        topic &quot;facet, indexed&quot;
+        TEXT        format &quot;book | journal | thesis&quot;
+        TEXT        location &quot;shelf code&quot;
+        TEXT        cover_image
+        INT         year
+        INT         total_copies
+        INT         available_copies
+        TEXT        barcode UK &quot;B-xxxxxxxx, trigger-assigned&quot;
+        UUID        created_by FK &quot;users&quot;
+        TIMESTAMPTZ created_at
+    }
+
+    loans {
+        UUID        loan_id PK
+        UUID        user_id FK &quot;users, ON DELETE RESTRICT&quot;
+        UUID        catalog_id FK &quot;library_catalog, ON DELETE RESTRICT&quot;
+        TIMESTAMPTZ checkout_date
+        TIMESTAMPTZ due_date &quot;NOT NULL, CHECK due_date &gt; checkout_date&quot;
+        TIMESTAMPTZ return_date &quot;NULL = currently borrowed&quot;
+        loan_status status &quot;ENUM active|returned|overdue&quot;
+    }
+
+    fines {
+        UUID          fine_id PK
+        UUID          loan_id FK,UK &quot;UNIQUE(loan_id) - idempotent nightly cron&quot;
+        UUID          user_id FK
+        NUMERIC       amount &quot;NUMERIC(10,2), CHECK amount &gt; 0 - never FLOAT&quot;
+        fine_status   status &quot;ENUM pending|paid|waived&quot;
+        TIMESTAMPTZ   calculated_at
+    }
+
+    payments {
+        UUID           payment_id PK
+        UUID           fine_id FK &quot;NOT NULL - no orphan payments&quot;
+        UUID           user_id FK
+        NUMERIC        amount &quot;CHECK amount &gt; 0&quot;
+        TEXT           method &quot;bkash | nagad | cash | card&quot;
+        payment_status status &quot;ENUM pending|successful|failed&quot;
+        UUID           confirmed_by FK &quot;librarian who took the cash&quot;
+        TIMESTAMPTZ    paid_at
+    }
+
+    payment_sessions {
+        UUID        session_id PK
+        UUID        fine_id FK &quot;partial UNIQUE while unsettled&quot;
+        UUID        user_id FK
+        TEXT        method &quot;bkash | nagad | cash&quot;
+        TEXT        account_number &quot;payer wallet, stored masked&quot;
+        NUMERIC     amount &quot;CHECK amount &gt; 0&quot;
+        TEXT        otp_code &quot;simulated gateway OTP&quot;
+        TIMESTAMPTZ otp_expires_at
+        INT         attempts
+        TEXT        status &quot;pending|otp_sent|awaiting_counter|completed|failed|cancelled&quot;
+        UUID        confirmed_by FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ completed_at
+    }
+
+    holds {
+        UUID        hold_id PK
+        UUID        user_id FK &quot;ON DELETE CASCADE&quot;
+        UUID        catalog_id FK &quot;ON DELETE CASCADE&quot;
+        TIMESTAMPTZ placed_at
+        TIMESTAMPTZ notified_at &quot;NULL until the copy becomes available&quot;
+        TIMESTAMPTZ expires_at
+        hold_status status &quot;ENUM active|fulfilled|cancelled&quot;
+    }
+
+    research_papers {
+        UUID        paper_id PK
+        UUID        item_id FK,UK &quot;1:1 with media_items, ON DELETE CASCADE&quot;
+        TEXT_ARR    authors
+        TEXT_ARR    co_authors
+        DATE        publication_date
+        TEXT        doi
+        TEXT        journal
+        TEXT        conference
+        UUID        reviewer_id FK &quot;users&quot;
+        TEXT        review_notes
+        TIMESTAMPTZ reviewed_at
+        TIMESTAMPTZ submitted_at
+    }
+
+    student_projects {
+        UUID        project_id PK
+        UUID        item_id FK,UK &quot;1:1 with media_items&quot;
+        TEXT_ARR    team_members
+        UUID        supervisor_id FK &quot;users&quot;
+        INT         academic_year &quot;CHECK between 2000 and 2100&quot;
+        TEXT        course_code
+        TEXT        web_url
+        TEXT        github_repo
+        TEXT        app_download
+        UUID        approved_by FK &quot;users&quot;
+        TIMESTAMPTZ approved_at
+        TIMESTAMPTZ submitted_at
+    }
+
+    vector_embeddings {
+        UUID   embedding_id PK
+        UUID   item_id FK &quot;ON DELETE CASCADE&quot;
+        INT    chunk_index &quot;CHECK &gt;= 0, UNIQUE(item_id, chunk_index)&quot;
+        TEXT   chunk_text
+        VECTOR embedding &quot;vector(768), HNSW m=16 ef_construction=64&quot;
+    }
+
+    rag_index_state {
+        UUID        item_id PK,FK &quot;1:1 with media_items&quot;
+        TEXT        content_hash &quot;skips re-embedding unchanged files&quot;
+        INT         chunk_count
+        TIMESTAMPTZ indexed_at
+    }
+
+    ai_chat_messages {
+        UUID        message_id PK
+        UUID        session_id &quot;groups a conversation, indexed&quot;
+        UUID        user_id FK &quot;ON DELETE SET NULL&quot;
+        TEXT        query &quot;CHECK char_length(query) &lt;= 5000&quot;
+        TEXT        response
+        UUID_ARR    source_doc_ids &quot;citations&quot;
+        TEXT        model_used &quot;NOT NULL - which Groq/Gemini tier answered&quot;
+        TIMESTAMPTZ created_at
+    }
+
+    resource_reviews {
+        UUID        review_id PK
+        UUID        item_id &quot;UNIQUE(item_id, user_id)&quot;
+        UUID        user_id
+        INT         rating &quot;CHECK between 1 and 5&quot;
+        TEXT        body
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    role_requests {
+        UUID        request_id PK
+        UUID        user_id FK &quot;partial UNIQUE WHERE status=&#x27;pending&#x27;&quot;
+        role_tier   requested_role
+        TEXT        justification
+        TEXT        university_id &quot;verification evidence (migration 014)&quot;
+        TEXT        evidence_url &quot;uploaded ID-card scan&quot;
+        TEXT        status &quot;pending|approved|rejected&quot;
+        UUID        decided_by FK &quot;administrator&quot;
+        TEXT        decision_notes
+        TIMESTAMPTZ decided_at
+        TIMESTAMPTZ created_at
+    }
+
+    notifications {
+        UUID        notification_id PK
+        UUID        user_id FK &quot;ON DELETE CASCADE&quot;
+        TEXT        title
+        TEXT        body
+        TEXT        link &quot;deep link into the app&quot;
+        BOOLEAN     read
+        TIMESTAMPTZ created_at
+    }
+
+    refresh_tokens {
+        UUID        token_id PK
+        UUID        user_id FK &quot;ON DELETE CASCADE&quot;
+        TEXT        token_hash UK &quot;hash only - raw token never stored&quot;
+        TIMESTAMPTZ expires_at &quot;7 days&quot;
+        BOOLEAN     revoked &quot;server-side logout&quot;
+        TIMESTAMPTZ created_at
+    }
+
+    audit_log {
+        UUID        log_id PK
+        UUID        actor_id FK &quot;NULL = system/cron action&quot;
+        TEXT        action
+        TEXT        resource_type
+        UUID        resource_id
+        TEXT        ip_addr
+        TIMESTAMPTZ created_at &quot;append-only, RLS INSERT-only policy&quot;
+    }
+</pre></div>
+  </section>
+  <section id="data-sync">
+    <h2>Figure 4 — Data Sync Mechanics</h2>
+    <p class="cap">Report §2.4. How database changes reach the UI without a manual refresh: SSE, 60-second polling, refetch-on-mutation. <span class="src">docs/diagrams/data-sync.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% Data sync mechanics — how database changes reach the UI without a manual refresh
+%% Honest account of what the platform actually implements today.
+flowchart LR
+    subgraph db[&quot;PostgreSQL&quot;]
+        t1[(&quot;ai_chat_messages&quot;)]
+        t2[(&quot;notifications&quot;)]
+        t3[(&quot;loans / fines / media_items&quot;)]
+    end
+
+    subgraph api[&quot;Go API&quot;]
+        sse[&quot;SSE endpoint&lt;br/&gt;POST /api/v1/ai/chat/stream&lt;br/&gt;Content-Type: text/event-stream&quot;]
+        rest[&quot;REST endpoints&lt;br/&gt;JSON over HTTPS&quot;]
+    end
+
+    subgraph fe[&quot;Next.js client&quot;]
+        widget[&quot;AI chat widget&lt;br/&gt;EventSource-style reader over fetch&quot;]
+        bell[&quot;Notification bell&lt;br/&gt;setInterval 60 000 ms&quot;]
+        pages[&quot;Route segments&lt;br/&gt;server components refetch on navigation&quot;]
+        auth[&quot;Auth context&lt;br/&gt;silent token refresh on a timer&quot;]
+    end
+
+    t1 --&gt; sse --&gt;|&quot;push: token-by-token as the LLM generates&quot;| widget
+    t2 --&gt; rest --&gt;|&quot;pull: poll every 60 s&quot;| bell
+    t3 --&gt; rest --&gt;|&quot;pull: refetch after each mutation&lt;br/&gt;and on route change&quot;| pages
+    rest --&gt;|&quot;refresh before the 1 h JWT expires&quot;| auth
+
+    classDef push fill:#1f7a4d,stroke:#0d3d26,color:#fff
+    classDef poll fill:#8a5a00,stroke:#4d3200,color:#fff
+    class sse,widget push
+    class bell,pages,auth poll
+
+    note[&quot;Three mechanisms, deliberately chosen:&lt;br/&gt;1. SERVER-SENT EVENTS for AI answers — the only place where sub-second,&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;token-level latency matters. One-directional, so SSE beats a WebSocket:&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;plain HTTP, survives the nginx proxy, auto-reconnects.&lt;br/&gt;2. SHORT POLLING (60 s) for the notification bell — holds, review decisions,&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;overdue alerts. Cheap, stateless, no extra infrastructure.&lt;br/&gt;3. REFETCH-ON-MUTATION for everything transactional (loans, fines, uploads):&lt;br/&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;the mutation response is the new state, so the UI updates in the same round trip.&lt;br/&gt;&lt;br/&gt;NOT implemented: WebSockets and Postgres LISTEN/NOTIFY. Listed under Future Work —&lt;br/&gt;they would replace mechanism 2 with true push for multi-user circulation desks.&quot;]
+    note ~~~ db
+</pre></div>
+  </section>
+  <section id="flow-upload-ingestion">
+    <h2>Figure 5 — Flow 1: Upload → RAG Ingestion</h2>
+    <p class="cap">SDD Flow 1. Asynchronous worker pipeline: extract, chunk, embed, index. <span class="src">docs/diagrams/flow-upload-ingestion.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% SDD Flow 1 — Document upload -&gt; RAG ingestion pipeline (async)
+sequenceDiagram
+    autonumber
+    actor U as Researcher / Student
+    participant FE as Next.js upload form
+    participant API as Go API (/api/v1/media/upload)
+    participant S3 as MinIO
+    participant DB as PostgreSQL
+    participant Q as Redis queue
+    participant W as Ingestion worker
+    participant EMB as MiniLM embedder
+
+    U-&gt;&gt;FE: selects file + fills title, abstract, keywords, access tier
+    FE-&gt;&gt;API: POST multipart/form-data (Bearer JWT)
+    API-&gt;&gt;API: validate size, extension against chk_media_format, role
+    API-&gt;&gt;S3: stream binary -&gt; object key
+    S3--&gt;&gt;API: object key
+    API-&gt;&gt;DB: BEGIN
+    API-&gt;&gt;DB: INSERT media_items (item_type, format, status, access_tier, file_path)
+    API-&gt;&gt;DB: INSERT media_metadata (abstract, keywords, tags, language) — 1:1, FTS trigger fires
+    opt research or project upload
+        API-&gt;&gt;DB: INSERT research_papers / student_projects (1:1 specialisation)
+    end
+    API-&gt;&gt;DB: COMMIT
+    API-&gt;&gt;Q: LPUSH ingestion job {item_id, object_key}
+    API--&gt;&gt;FE: 201 Created (ingestion_status = NULL, &quot;processing&quot;)
+    FE--&gt;&gt;U: item appears immediately — badge shows &quot;indexing&quot;
+
+    Note over W,EMB: Asynchronous — the user never waits for embedding.
+    W-&gt;&gt;Q: BRPOP job
+    W-&gt;&gt;S3: download object
+    W-&gt;&gt;W: extract text (PyMuPDF / docx), detect language
+    W-&gt;&gt;DB: SELECT rag_index_state.content_hash
+    alt content hash unchanged
+        W--&gt;&gt;DB: skip — already indexed
+    else new or modified content
+        W-&gt;&gt;W: chunk at 512 tokens with 50-token overlap
+        W-&gt;&gt;EMB: embed each chunk (local, no API cost)
+        EMB--&gt;&gt;W: 768-dim vectors
+        W-&gt;&gt;DB: UPSERT vector_embeddings (item_id, chunk_index) — UNIQUE guards crash-retry duplicates
+        W-&gt;&gt;DB: UPSERT rag_index_state (content_hash, chunk_count, indexed_at)
+        W-&gt;&gt;DB: UPDATE media_items SET ingestion_status = &#x27;indexed&#x27;
+    end
+    alt extraction or embedding fails
+        W-&gt;&gt;DB: UPDATE media_items SET ingestion_status=&#x27;failed&#x27;, ingestion_error=&lt;reason&gt;
+    end
+</pre></div>
+  </section>
+  <section id="flow-rag-query">
+    <h2>Figure 6 — Flow 2: RAG Query with Access Control</h2>
+    <p class="cap">SDD Flow 2. Hybrid retrieval, tier filtering before prompt assembly, Groq with Gemini fallback, SSE streaming. <span class="src">docs/diagrams/flow-rag-query.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% SDD Flow 2 — RAG AI query with access control (streamed over SSE)
+sequenceDiagram
+    autonumber
+    actor U as User (browser)
+    participant FE as Next.js frontend
+    participant NG as nginx
+    participant API as Go API (/api/v1/ai/chat/stream)
+    participant R as Redis cache
+    participant RAG as Python RAG service
+    participant DB as PostgreSQL + pgvector
+    participant LLM as Groq (primary)
+    participant GM as Gemini (fallback)
+
+    U-&gt;&gt;FE: types a question in the AI widget
+    FE-&gt;&gt;NG: POST /api/v1/ai/chat/stream (Bearer JWT, Accept: text/event-stream)
+    NG-&gt;&gt;API: proxy (30s timeout for /ai/)
+    API-&gt;&gt;API: middleware.Authenticate -&gt; user_id + role_tier from signed JWT
+    API-&gt;&gt;R: GET cache[hash(query, role, lang)]
+    alt cache hit (&lt; 5 min old)
+        R--&gt;&gt;API: cached grounded answer
+        API--&gt;&gt;FE: SSE stream of cached answer (no Groq call, quota preserved)
+    else cache miss
+        API-&gt;&gt;RAG: POST /query {query, user_role, language, history}
+        opt rewrite_query = true
+            RAG-&gt;&gt;GM: rewrite the query for retrieval
+            GM--&gt;&gt;RAG: normalised query
+        end
+        RAG-&gt;&gt;RAG: embed query with paraphrase-multilingual-MiniLM-L12-v2 (768-dim, local)
+        par hybrid retrieval
+            RAG-&gt;&gt;DB: vector search — cosine ANN over HNSW index
+        and
+            RAG-&gt;&gt;DB: keyword search — PostgreSQL FTS (English + Bangla configs)
+        end
+        DB--&gt;&gt;RAG: candidate chunks + owning media_items
+        RAG-&gt;&gt;RAG: reciprocal rank fusion, then drop every chunk whose&lt;br/&gt;media_items.access_tier outranks the caller&#x27;s role_tier
+        Note over RAG,DB: Access control happens BEFORE the prompt is built,&lt;br/&gt;so restricted documents can never leak through the model.
+        RAG-&gt;&gt;LLM: grounded prompt (context + citations), model tier chosen by query size
+        alt Groq responds
+            LLM--&gt;&gt;RAG: streamed tokens
+        else Groq unavailable / rate-limited
+            RAG-&gt;&gt;GM: same prompt
+            GM--&gt;&gt;RAG: streamed tokens
+        end
+        RAG--&gt;&gt;API: SSE token stream + source_doc_ids
+        API-&gt;&gt;DB: INSERT ai_chat_messages (query, response, source_doc_ids, model_used)
+        API-&gt;&gt;R: SETEX cache 300s
+        API--&gt;&gt;FE: SSE token stream
+    end
+    FE--&gt;&gt;U: answer renders progressively, with clickable citations
+</pre></div>
+  </section>
+  <section id="flow-borrow-fine">
+    <h2>Figure 7 — Flow 3: Barcode Borrow and the Fine Cycle</h2>
+    <p class="cap">SDD Flow 3. Circulation desk transaction plus the nightly idempotent fine worker. <span class="src">docs/diagrams/flow-borrow-fine.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% SDD Flow 3 — Barcode borrow at the circulation desk, plus the nightly fine cycle
+sequenceDiagram
+    autonumber
+    actor L as Librarian
+    participant SC as HID barcode scanner
+    participant FE as Circulation desk UI
+    participant API as Go API (/api/v1/library/circulation)
+    participant DB as PostgreSQL
+    participant FW as Fine worker (cron)
+    participant MAIL as Brevo SMTP
+    actor M as Member
+
+    L-&gt;&gt;SC: scans member card, then book label
+    SC-&gt;&gt;FE: keystrokes &quot;M-A0000000\n&quot; and &quot;B-1F2E3D4C\n&quot;
+    FE-&gt;&gt;FE: strip trailing \r\n appended by the scanner
+    FE-&gt;&gt;API: POST /circulation/checkout {member_barcode, item_barcode}
+    API-&gt;&gt;API: RequireRole(librarian, administrator)
+    API-&gt;&gt;DB: BEGIN
+    API-&gt;&gt;DB: resolve barcodes -&gt; user_id, catalog_id
+    API-&gt;&gt;DB: check outstanding fines vs FINE_BLOCK_THRESHOLD_BDT
+    alt member blocked by unpaid fines
+        DB--&gt;&gt;API: total fines &gt;= threshold
+        API--&gt;&gt;FE: 403 &quot;settle outstanding fines first&quot;
+    else eligible
+        API-&gt;&gt;DB: INSERT loans (due_date = now + LOAN_PERIOD_DAYS)
+        Note over DB: idx_loans_active_user_item (user_id, catalog_id)&lt;br/&gt;WHERE return_date IS NULL — blocks a duplicate active loan
+        API-&gt;&gt;DB: UPDATE library_catalog SET available_copies = available_copies - 1
+        API-&gt;&gt;DB: INSERT audit_log
+        API-&gt;&gt;DB: COMMIT
+        API--&gt;&gt;FE: 201 loan created, due date shown
+    end
+
+    Note over FW,DB: Nightly, independent of any user session.
+    FW-&gt;&gt;DB: SELECT loans WHERE return_date IS NULL AND due_date &lt; now()
+    FW-&gt;&gt;FW: amount = days_overdue * FINE_RATE_BDT_PER_DAY, capped at MAX_FINE_PER_LOAN_BDT
+    FW-&gt;&gt;DB: INSERT INTO fines ... ON CONFLICT (loan_id) DO UPDATE
+    Note over DB: UNIQUE(loan_id) makes the nightly run idempotent —&lt;br/&gt;no duplicate fine row per overdue loan
+    FW-&gt;&gt;DB: INSERT notifications
+    FW-&gt;&gt;MAIL: overdue email
+    MAIL--&gt;&gt;M: &quot;Your book is overdue — fine now BDT X&quot;
+
+    M-&gt;&gt;FE: pays via bKash/Nagad OTP or requests in-person cash
+    FE-&gt;&gt;API: POST /fines/{id}/pay/initiate -&gt; /confirm (or /pay/cash)
+    API-&gt;&gt;DB: payment_sessions -&gt; payments -&gt; fines.status = &#x27;paid&#x27;
+    API-&gt;&gt;DB: return book -&gt; restore available_copies, fulfil the oldest active hold
+</pre></div>
+  </section>
+  <section id="flow-auth-rbac">
+    <h2>Figure 8 — Flow 4: Authentication and RBAC</h2>
+    <p class="cap">Report §4.1–4.2. Three sign-in paths, JWT lifecycle, role enforcement, and the only legitimate escalation route. <span class="src">docs/diagrams/flow-auth-rbac.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% SDD Flow 4 — Authentication paths and RBAC enforcement
+flowchart TD
+    start([&quot;Visitor&quot;]) --&gt; choice{&quot;Sign-in method&quot;}
+
+    choice --&gt;|&quot;email + password&quot;| pw[&quot;POST /auth/login&quot;]
+    choice --&gt;|&quot;Continue with Google&quot;| g1[&quot;GET /auth/google/login&quot;]
+    choice --&gt;|&quot;email me a link&lt;br/&gt;(also = forgot password)&quot;| m1[&quot;POST /auth/magic/request&quot;]
+    choice --&gt;|&quot;browse anonymously&quot;| anon[&quot;OptionalAuth routes&lt;br/&gt;public rows only&quot;]
+
+    pw --&gt; lock{&quot;5 failed attempts&lt;br/&gt;in the window?&quot;}
+    lock --&gt;|yes| locked[&quot;423 locked for 15 min&quot;]
+    lock --&gt;|no| verify[&quot;bcrypt compare (cost 12)&quot;]
+    verify --&gt;|mismatch| fail[&quot;401 invalid credentials&lt;br/&gt;increment counter&quot;]
+    verify --&gt;|match| issue
+
+    g1 --&gt; g2[&quot;Google consent screen&quot;] --&gt; g3[&quot;GET /auth/google/callback?code&quot;]
+    g3 --&gt; g4[&quot;exchange code, find-or-create user by email&lt;br/&gt;password_hash stays NULL&quot;] --&gt; issue
+
+    m1 --&gt; m2[&quot;single-use token in Redis&lt;br/&gt;emailed over SMTP&quot;] --&gt; m3[&quot;GET /auth/magic/verify?token&quot;] --&gt; issue
+
+    issue[&quot;Issue tokens&quot;] --&gt; jwt[&quot;access JWT — 1 hour&lt;br/&gt;claims: user_id, role_tier, exp, jti&quot;]
+    issue --&gt; rt[&quot;refresh token — 7 days&lt;br/&gt;only the hash is stored in refresh_tokens&quot;]
+
+    jwt --&gt; apicall[&quot;Any /api/v1 request&lt;br/&gt;Authorization: Bearer &amp;lt;jwt&amp;gt;&quot;]
+    apicall --&gt; mw[&quot;middleware.Authenticate&lt;br/&gt;verify HS256 signature + expiry&quot;]
+    mw --&gt;|invalid| r401[&quot;401&quot;]
+    mw --&gt;|valid| role[&quot;middleware.RequireRole(...)&lt;br/&gt;role read from the SIGNED TOKEN,&lt;br/&gt;never from the request body&quot;]
+    role --&gt;|not permitted| r403[&quot;403 — UI also hides the control&quot;]
+    role --&gt;|permitted| handler[&quot;Handler executes&lt;br/&gt;+ audit_log row&quot;]
+
+    rt --&gt; refresh[&quot;POST /auth/refresh&quot;] --&gt; revoked{&quot;revoked or expired?&quot;}
+    revoked --&gt;|yes| r401
+    revoked --&gt;|no| issue
+    handler --&gt; logout[&quot;POST /auth/logout&lt;br/&gt;revoked = true (server-side kill)&quot;]
+
+    subgraph escalation[&quot;Role escalation — the only legitimate path&quot;]
+        reg[&quot;POST /auth/register&lt;br/&gt;role_tier FORCED to &#x27;student&#x27;&lt;br/&gt;client-supplied role ignored&quot;]
+        rr[&quot;POST /role-requests&lt;br/&gt;+ university_id + ID-card evidence&quot;]
+        adm[&quot;Administrator reviews evidence&lt;br/&gt;POST /admin/role-requests/{id}/decide&quot;]
+        reg --&gt; rr --&gt; adm --&gt; promoted[&quot;role_tier updated + user notified&quot;]
+    end
+</pre></div>
+  </section>
+  <section id="cicd-pipeline">
+    <h2>Figure 9 — CI/CD Pipeline</h2>
+    <p class="cap">Report §6.1–6.3. Test gate, GHCR image build, SSH deploy, migrations, smoke check. <span class="src">docs/diagrams/cicd-pipeline.mmd</span></p>
+    <div class="frame"><pre class="mermaid">%% CI/CD pipeline — .github/workflows/deploy.yml
+%% Images build on GitHub runners and ship to GHCR; the 4 GiB VM only pulls.
+flowchart LR
+    dev[&quot;Developer&lt;br/&gt;Conventional Commits&lt;br/&gt;feat(scope): / fix(scope):&quot;] --&gt;|git push| main[&quot;GitHub — branch main&lt;br/&gt;(also: workflow_dispatch)&quot;]
+
+    subgraph gha[&quot;GitHub Actions — concurrency group deploy-main&quot;]
+        direction TB
+        subgraph job1[&quot;job: test — quality gate&quot;]
+            t1[&quot;go vet ./...&quot;]
+            t2[&quot;go test ./... -coverprofile&quot;]
+            t3[&quot;coverage summary + artifact&quot;]
+            t4[&quot;pytest — RAG keyword extractor&quot;]
+            t5[&quot;npx tsc --noEmit — frontend typecheck&quot;]
+        end
+        subgraph job2[&quot;job: build — matrix x4&quot;]
+            b1[&quot;frontend — Dockerfile (Next.js standalone)&quot;]
+            b2[&quot;api — api/Dockerfile (Go, multi-stage)&quot;]
+            b3[&quot;rag — rag/Dockerfile (Python 3.11)&quot;]
+            b4[&quot;fine-worker — api/Dockerfile.fineworker&quot;]
+        end
+        job1 --&gt;|needs: test| job2
+        job2 --&gt; push[&quot;docker/build-push-action&lt;br/&gt;tags :latest and :sha&lt;br/&gt;GHA layer cache per image&quot;]
+    end
+
+    push --&gt; ghcr[(&quot;GHCR&lt;br/&gt;ghcr.io/mayamoho/csedu-*&quot;)]
+
+    subgraph job3[&quot;job: deploy — appleboy/ssh-action&quot;]
+        d1[&quot;git reset --hard origin/main on the VM&quot;]
+        d2[&quot;apply infra/db/migrations/*.sql — idempotent&quot;]
+        d3[&quot;compose pull frontend api rag fine-worker&quot;]
+        d4[&quot;compose up -d + restart nginx&lt;br/&gt;(nginx caches upstream IPs)&quot;]
+        d5[&quot;docker image prune -f&quot;]
+        d1 --&gt; d2 --&gt; d3 --&gt; d4 --&gt; d5
+    end
+
+    ghcr --&gt; job3
+    job3 --&gt; smoke{&quot;Smoke check&lt;br/&gt;20 tries x 5 s&lt;br/&gt;curl :8080 == 200?&quot;}
+    smoke --&gt;|yes| live[&quot;Live — https://devops.farefin.com&lt;br/&gt;host nginx + certbot TLS&quot;]
+    smoke --&gt;|no| failjob[&quot;Workflow fails, deploy is flagged&lt;br/&gt;previous containers keep serving&quot;]
+
+    subgraph envs[&quot;Environments&quot;]
+        e1[&quot;Development — docker-compose.yml&lt;br/&gt;all ports exposed, changeme_in_dev secrets&quot;]
+        e2[&quot;Production — docker-compose.prod.yml + .ghcr.yml&lt;br/&gt;only host port 8080 published, real .env on the VM&quot;]
+    end
+
+    subgraph secrets[&quot;Secrets — GitHub Actions secrets, never in git&quot;]
+        s1[&quot;VM_HOST · VM_USER · VM_SSH_KEY · VM_APP_DIR&quot;]
+        s2[&quot;GHCR_TOKEN · GITHUB_TOKEN (auto)&quot;]
+        s3[&quot;Runtime secrets live only in the VM&#x27;s .env&lt;br/&gt;(.env.production in git holds placeholders)&quot;]
+    end
+</pre></div>
+  </section>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose',
+    er: { layoutDirection: 'TB', entityPadding: 10 },
+    flowchart: { curve: 'basis', useMaxWidth: false },
+    sequence: { useMaxWidth: false, wrap: true, width: 200 } });
+</script>
+</body>
+</html>

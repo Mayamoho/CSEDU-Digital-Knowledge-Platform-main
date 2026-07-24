@@ -1,0 +1,45 @@
+%% SDD Flow 3 — Barcode borrow at the circulation desk, plus the nightly fine cycle
+sequenceDiagram
+    autonumber
+    actor L as Librarian
+    participant SC as HID barcode scanner
+    participant FE as Circulation desk UI
+    participant API as Go API (/api/v1/library/circulation)
+    participant DB as PostgreSQL
+    participant FW as Fine worker (cron)
+    participant MAIL as Brevo SMTP
+    actor M as Member
+
+    L->>SC: scans member card, then book label
+    SC->>FE: keystrokes "M-A0000000\n" and "B-1F2E3D4C\n"
+    FE->>FE: strip trailing \r\n appended by the scanner
+    FE->>API: POST /circulation/checkout {member_barcode, item_barcode}
+    API->>API: RequireRole(librarian, administrator)
+    API->>DB: BEGIN
+    API->>DB: resolve barcodes -> user_id, catalog_id
+    API->>DB: check outstanding fines vs FINE_BLOCK_THRESHOLD_BDT
+    alt member blocked by unpaid fines
+        DB-->>API: total fines >= threshold
+        API-->>FE: 403 "settle outstanding fines first"
+    else eligible
+        API->>DB: INSERT loans (due_date = now + LOAN_PERIOD_DAYS)
+        Note over DB: idx_loans_active_user_item (user_id, catalog_id)<br/>WHERE return_date IS NULL — blocks a duplicate active loan
+        API->>DB: UPDATE library_catalog SET available_copies = available_copies - 1
+        API->>DB: INSERT audit_log
+        API->>DB: COMMIT
+        API-->>FE: 201 loan created, due date shown
+    end
+
+    Note over FW,DB: Nightly, independent of any user session.
+    FW->>DB: SELECT loans WHERE return_date IS NULL AND due_date < now()
+    FW->>FW: amount = days_overdue * FINE_RATE_BDT_PER_DAY, capped at MAX_FINE_PER_LOAN_BDT
+    FW->>DB: INSERT INTO fines ... ON CONFLICT (loan_id) DO UPDATE
+    Note over DB: UNIQUE(loan_id) makes the nightly run idempotent —<br/>no duplicate fine row per overdue loan
+    FW->>DB: INSERT notifications
+    FW->>MAIL: overdue email
+    MAIL-->>M: "Your book is overdue — fine now BDT X"
+
+    M->>FE: pays via bKash/Nagad OTP or requests in-person cash
+    FE->>API: POST /fines/{id}/pay/initiate -> /confirm (or /pay/cash)
+    API->>DB: payment_sessions -> payments -> fines.status = 'paid'
+    API->>DB: return book -> restore available_copies, fulfil the oldest active hold

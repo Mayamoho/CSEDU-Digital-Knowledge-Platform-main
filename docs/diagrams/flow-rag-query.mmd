@@ -1,0 +1,49 @@
+%% SDD Flow 2 — RAG AI query with access control (streamed over SSE)
+sequenceDiagram
+    autonumber
+    actor U as User (browser)
+    participant FE as Next.js frontend
+    participant NG as nginx
+    participant API as Go API (/api/v1/ai/chat/stream)
+    participant R as Redis cache
+    participant RAG as Python RAG service
+    participant DB as PostgreSQL + pgvector
+    participant LLM as Groq (primary)
+    participant GM as Gemini (fallback)
+
+    U->>FE: types a question in the AI widget
+    FE->>NG: POST /api/v1/ai/chat/stream (Bearer JWT, Accept: text/event-stream)
+    NG->>API: proxy (30s timeout for /ai/)
+    API->>API: middleware.Authenticate -> user_id + role_tier from signed JWT
+    API->>R: GET cache[hash(query, role, lang)]
+    alt cache hit (< 5 min old)
+        R-->>API: cached grounded answer
+        API-->>FE: SSE stream of cached answer (no Groq call, quota preserved)
+    else cache miss
+        API->>RAG: POST /query {query, user_role, language, history}
+        opt rewrite_query = true
+            RAG->>GM: rewrite the query for retrieval
+            GM-->>RAG: normalised query
+        end
+        RAG->>RAG: embed query with paraphrase-multilingual-MiniLM-L12-v2 (768-dim, local)
+        par hybrid retrieval
+            RAG->>DB: vector search — cosine ANN over HNSW index
+        and
+            RAG->>DB: keyword search — PostgreSQL FTS (English + Bangla configs)
+        end
+        DB-->>RAG: candidate chunks + owning media_items
+        RAG->>RAG: reciprocal rank fusion, then drop every chunk whose<br/>media_items.access_tier outranks the caller's role_tier
+        Note over RAG,DB: Access control happens BEFORE the prompt is built,<br/>so restricted documents can never leak through the model.
+        RAG->>LLM: grounded prompt (context + citations), model tier chosen by query size
+        alt Groq responds
+            LLM-->>RAG: streamed tokens
+        else Groq unavailable / rate-limited
+            RAG->>GM: same prompt
+            GM-->>RAG: streamed tokens
+        end
+        RAG-->>API: SSE token stream + source_doc_ids
+        API->>DB: INSERT ai_chat_messages (query, response, source_doc_ids, model_used)
+        API->>R: SETEX cache 300s
+        API-->>FE: SSE token stream
+    end
+    FE-->>U: answer renders progressively, with clickable citations

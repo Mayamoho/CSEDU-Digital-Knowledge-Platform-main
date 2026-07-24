@@ -1,0 +1,57 @@
+%% CSEDU Digital Knowledge Platform — High-Level / Deployment Architecture
+%% Layered modular monolith. One public entry point (host nginx :443 -> docker nginx :8080).
+flowchart TB
+    subgraph client["Client"]
+        browser["Browser<br/>desktop + mobile"]
+        scanner["HID barcode scanner<br/>(keyboard emulation)"]
+    end
+
+    subgraph host["Azure VM — ip-lab-student-03 (4 GiB, shared with other teams)"]
+        hostnginx["Host nginx + certbot TLS<br/>devops.farefin.com :443"]
+
+        subgraph dockernet["Private Docker network — only host port 8080 published"]
+            nginx["nginx (csedu_nginx) :8080<br/>/ -> frontend<br/>/api/v1/ -> api<br/>/api/v1/ai/ -> api (30s timeout)"]
+            fe["Next.js 15 frontend :3000<br/>App Router, RSC + SSR<br/>standalone output"]
+            api["Go API :8080<br/>chi router, modular monolith<br/>auth · library · loan · fine · media<br/>research · projects · reviews<br/>roles · notify · admin · ai"]
+            rag["Python FastAPI RAG :8001<br/>MiniLM embed · hybrid retrieve<br/>rerank · LLM call · SSE stream"]
+            ingest["Ingestion worker (Go)<br/>extract -> chunk 512/50 -> embed"]
+            finew["Fine worker (Go cron)<br/>nightly overdue calculation"]
+            pg[("PostgreSQL 16 + pgvector :5432<br/>19 tables · HNSW index · FTS")]
+            redis[("Redis :6379<br/>job queue · AI cache 5 min<br/>magic-link tokens")]
+            minio[("MinIO :9000<br/>S3-compatible object store")]
+            prom["Prometheus<br/>scrapes api:8080/metrics"]
+        end
+    end
+
+    subgraph ext["External services (free tier)"]
+        groq["Groq API<br/>llama-3.1-8b · llama-3.3-70b · gpt-oss-120b"]
+        gemini["Google Gemini 2.5 Flash<br/>fallback + query rewrite"]
+        google["Google OAuth 2.0"]
+        smtp["Brevo SMTP<br/>notifications + magic links"]
+    end
+
+    browser -->|HTTPS| hostnginx
+    scanner -.->|keystrokes| browser
+    hostnginx -->|proxy_pass :8080| nginx
+    nginx --> fe
+    nginx --> api
+    fe -->|"REST /api/v1"| nginx
+
+    api --> pg
+    api --> redis
+    api --> minio
+    api -->|"POST /query, SSE"| rag
+    api --> google
+    api --> smtp
+
+    redis -->|job| ingest
+    ingest --> minio
+    ingest --> pg
+    finew --> pg
+    finew --> smtp
+
+    rag --> pg
+    rag -->|primary| groq
+    rag -.->|on failure| gemini
+
+    prom --> api

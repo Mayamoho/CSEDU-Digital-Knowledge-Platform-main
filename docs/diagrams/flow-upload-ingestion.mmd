@@ -1,0 +1,46 @@
+%% SDD Flow 1 — Document upload -> RAG ingestion pipeline (async)
+sequenceDiagram
+    autonumber
+    actor U as Researcher / Student
+    participant FE as Next.js upload form
+    participant API as Go API (/api/v1/media/upload)
+    participant S3 as MinIO
+    participant DB as PostgreSQL
+    participant Q as Redis queue
+    participant W as Ingestion worker
+    participant EMB as MiniLM embedder
+
+    U->>FE: selects file + fills title, abstract, keywords, access tier
+    FE->>API: POST multipart/form-data (Bearer JWT)
+    API->>API: validate size, extension against chk_media_format, role
+    API->>S3: stream binary -> object key
+    S3-->>API: object key
+    API->>DB: BEGIN
+    API->>DB: INSERT media_items (item_type, format, status, access_tier, file_path)
+    API->>DB: INSERT media_metadata (abstract, keywords, tags, language) — 1:1, FTS trigger fires
+    opt research or project upload
+        API->>DB: INSERT research_papers / student_projects (1:1 specialisation)
+    end
+    API->>DB: COMMIT
+    API->>Q: LPUSH ingestion job {item_id, object_key}
+    API-->>FE: 201 Created (ingestion_status = NULL, "processing")
+    FE-->>U: item appears immediately — badge shows "indexing"
+
+    Note over W,EMB: Asynchronous — the user never waits for embedding.
+    W->>Q: BRPOP job
+    W->>S3: download object
+    W->>W: extract text (PyMuPDF / docx), detect language
+    W->>DB: SELECT rag_index_state.content_hash
+    alt content hash unchanged
+        W-->>DB: skip — already indexed
+    else new or modified content
+        W->>W: chunk at 512 tokens with 50-token overlap
+        W->>EMB: embed each chunk (local, no API cost)
+        EMB-->>W: 768-dim vectors
+        W->>DB: UPSERT vector_embeddings (item_id, chunk_index) — UNIQUE guards crash-retry duplicates
+        W->>DB: UPSERT rag_index_state (content_hash, chunk_count, indexed_at)
+        W->>DB: UPDATE media_items SET ingestion_status = 'indexed'
+    end
+    alt extraction or embedding fails
+        W->>DB: UPDATE media_items SET ingestion_status='failed', ingestion_error=<reason>
+    end

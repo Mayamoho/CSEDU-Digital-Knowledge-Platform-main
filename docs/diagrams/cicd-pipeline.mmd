@@ -1,0 +1,50 @@
+%% CI/CD pipeline — .github/workflows/deploy.yml
+%% Images build on GitHub runners and ship to GHCR; the 4 GiB VM only pulls.
+flowchart LR
+    dev["Developer<br/>Conventional Commits<br/>feat(scope): / fix(scope):"] -->|git push| main["GitHub — branch main<br/>(also: workflow_dispatch)"]
+
+    subgraph gha["GitHub Actions — concurrency group deploy-main"]
+        direction TB
+        subgraph job1["job: test — quality gate"]
+            t1["go vet ./..."]
+            t2["go test ./... -coverprofile"]
+            t3["coverage summary + artifact"]
+            t4["pytest — RAG keyword extractor"]
+            t5["npx tsc --noEmit — frontend typecheck"]
+        end
+        subgraph job2["job: build — matrix x4"]
+            b1["frontend — Dockerfile (Next.js standalone)"]
+            b2["api — api/Dockerfile (Go, multi-stage)"]
+            b3["rag — rag/Dockerfile (Python 3.11)"]
+            b4["fine-worker — api/Dockerfile.fineworker"]
+        end
+        job1 -->|needs: test| job2
+        job2 --> push["docker/build-push-action<br/>tags :latest and :sha<br/>GHA layer cache per image"]
+    end
+
+    push --> ghcr[("GHCR<br/>ghcr.io/mayamoho/csedu-*")]
+
+    subgraph job3["job: deploy — appleboy/ssh-action"]
+        d1["git reset --hard origin/main on the VM"]
+        d2["apply infra/db/migrations/*.sql — idempotent"]
+        d3["compose pull frontend api rag fine-worker"]
+        d4["compose up -d + restart nginx<br/>(nginx caches upstream IPs)"]
+        d5["docker image prune -f"]
+        d1 --> d2 --> d3 --> d4 --> d5
+    end
+
+    ghcr --> job3
+    job3 --> smoke{"Smoke check<br/>20 tries x 5 s<br/>curl :8080 == 200?"}
+    smoke -->|yes| live["Live — https://devops.farefin.com<br/>host nginx + certbot TLS"]
+    smoke -->|no| failjob["Workflow fails, deploy is flagged<br/>previous containers keep serving"]
+
+    subgraph envs["Environments"]
+        e1["Development — docker-compose.yml<br/>all ports exposed, changeme_in_dev secrets"]
+        e2["Production — docker-compose.prod.yml + .ghcr.yml<br/>only host port 8080 published, real .env on the VM"]
+    end
+
+    subgraph secrets["Secrets — GitHub Actions secrets, never in git"]
+        s1["VM_HOST · VM_USER · VM_SSH_KEY · VM_APP_DIR"]
+        s2["GHCR_TOKEN · GITHUB_TOKEN (auto)"]
+        s3["Runtime secrets live only in the VM's .env<br/>(.env.production in git holds placeholders)"]
+    end

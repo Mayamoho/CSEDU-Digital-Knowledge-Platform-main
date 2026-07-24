@@ -1,0 +1,33 @@
+%% Data sync mechanics — how database changes reach the UI without a manual refresh
+%% Honest account of what the platform actually implements today.
+flowchart LR
+    subgraph db["PostgreSQL"]
+        t1[("ai_chat_messages")]
+        t2[("notifications")]
+        t3[("loans / fines / media_items")]
+    end
+
+    subgraph api["Go API"]
+        sse["SSE endpoint<br/>POST /api/v1/ai/chat/stream<br/>Content-Type: text/event-stream"]
+        rest["REST endpoints<br/>JSON over HTTPS"]
+    end
+
+    subgraph fe["Next.js client"]
+        widget["AI chat widget<br/>EventSource-style reader over fetch"]
+        bell["Notification bell<br/>setInterval 60 000 ms"]
+        pages["Route segments<br/>server components refetch on navigation"]
+        auth["Auth context<br/>silent token refresh on a timer"]
+    end
+
+    t1 --> sse -->|"push: token-by-token as the LLM generates"| widget
+    t2 --> rest -->|"pull: poll every 60 s"| bell
+    t3 --> rest -->|"pull: refetch after each mutation<br/>and on route change"| pages
+    rest -->|"refresh before the 1 h JWT expires"| auth
+
+    classDef push fill:#1f7a4d,stroke:#0d3d26,color:#fff
+    classDef poll fill:#8a5a00,stroke:#4d3200,color:#fff
+    class sse,widget push
+    class bell,pages,auth poll
+
+    note["Three mechanisms, deliberately chosen:<br/>1. SERVER-SENT EVENTS for AI answers — the only place where sub-second,<br/>&nbsp;&nbsp;&nbsp;token-level latency matters. One-directional, so SSE beats a WebSocket:<br/>&nbsp;&nbsp;&nbsp;plain HTTP, survives the nginx proxy, auto-reconnects.<br/>2. SHORT POLLING (60 s) for the notification bell — holds, review decisions,<br/>&nbsp;&nbsp;&nbsp;overdue alerts. Cheap, stateless, no extra infrastructure.<br/>3. REFETCH-ON-MUTATION for everything transactional (loans, fines, uploads):<br/>&nbsp;&nbsp;&nbsp;the mutation response is the new state, so the UI updates in the same round trip.<br/><br/>NOT implemented: WebSockets and Postgres LISTEN/NOTIFY. Listed under Future Work —<br/>they would replace mechanism 2 with true push for multi-user circulation desks."]
+    note ~~~ db
