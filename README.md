@@ -85,8 +85,7 @@ The application that is deployed lives at the repository root.
 │   └── prometheus/      # Scrape configuration
 ├── docs/
 │   ├── api/             # Postman collection + environments
-│   ├── diagrams/        # Mermaid sources + index.html viewer
-│   └── archive/         # Historical status notes kept for reference
+│   └── diagrams/        # Mermaid sources + index.html viewer
 ├── docker-compose.yml            # Development
 ├── docker-compose.prod.yml       # Production (only host port 8080 published)
 ├── docker-compose.ghcr.yml       # Production overlay: pull prebuilt images

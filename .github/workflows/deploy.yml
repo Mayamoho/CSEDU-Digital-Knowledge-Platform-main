@@ -119,12 +119,16 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
+          # Key auth is preferred; VM_PASSWORD is the fallback for a VM that
+          # only has password login. Set exactly one of them as a repo secret.
           key: ${{ secrets.VM_SSH_KEY }}
+          password: ${{ secrets.VM_PASSWORD }}
+          port: ${{ secrets.VM_PORT || 22 }}
           script_stop: true
-          command_timeout: 20m
+          command_timeout: 30m
           script: |
             set -e
-            cd ${{ secrets.VM_APP_DIR }}
+            cd ${{ secrets.VM_APP_DIR || '~/csedu-platform' }}
 
             git fetch origin
             git reset --hard origin/main
@@ -144,20 +148,36 @@ jobs:
               $COMPOSE exec -T postgres psql -U csedu_user -d csedu_platform < "$f" || true
             done
 
-            $COMPOSE pull frontend api rag fine-worker
-            $COMPOSE up -d nginx frontend api rag fine-worker
+            # Prefer the images GitHub already built. If the GHCR packages are
+            # private and no token is configured, fall back to building on the
+            # VM so a deploy never silently stops half-way.
+            if $COMPOSE pull frontend api rag fine-worker; then
+              echo "using prebuilt GHCR images"
+              $COMPOSE up -d nginx frontend api rag ingestion-worker fine-worker
+            else
+              echo "GHCR pull failed — building on the VM instead"
+              PROD="docker compose -f docker-compose.prod.yml"
+              $PROD build frontend api rag ingestion-worker fine-worker
+              $PROD up -d nginx frontend api rag ingestion-worker fine-worker
+            fi
 
             # nginx caches upstream container IPs; restart so it re-resolves them
-            $COMPOSE restart nginx
+            docker compose -f docker-compose.prod.yml restart nginx
 
             docker image prune -f
-            $COMPOSE ps
+            docker compose -f docker-compose.prod.yml ps
 
       - name: Smoke check
         run: |
-          for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "http://${{ secrets.VM_HOST }}:8080/" || true)
-            if [ "$code" = "200" ]; then echo "site up"; exit 0; fi
+          host="${{ secrets.VM_HOST }}"
+          for i in $(seq 1 30); do
+            site=$(curl -s -o /dev/null -w '%{http_code}' "http://$host:8080/" || true)
+            api=$(curl -s -o /dev/null -w '%{http_code}' "http://$host:8080/api/v1/health" || true)
+            echo "attempt $i: site=$site api=$api"
+            if [ "$site" = "200" ] && [ "$api" = "200" ]; then
+              echo "frontend and API are both healthy"
+              exit 0
+            fi
             sleep 5
           done
-          echo "site did not return 200 after restart"; exit 1
+          echo "stack did not become healthy after restart"; exit 1
