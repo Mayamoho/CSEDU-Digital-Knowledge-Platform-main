@@ -202,7 +202,7 @@ stays on the private Docker network.
   administrator decision on a verified role request.
 - Access tiers are enforced in SQL, including inside the RAG retriever — the
   model never sees a document the caller may not read.
-- nginx applies rate limits (20 requests/minute on credential endpoints, 30/min
+- nginx applies rate limits (60 requests/minute on credential endpoints, 60/min
   on AI routes, 20/s elsewhere), per-IP connection limits and security headers.
 - No credentials are committed. `.env.production` holds placeholders; runtime
   secrets live in the VM's untracked `.env`, and deployment secrets in GitHub
