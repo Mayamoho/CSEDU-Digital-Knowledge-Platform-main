@@ -31,3 +31,7 @@ minio_data/
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# Local scratch
+Screenshot from *.png
+logs-*.csv
