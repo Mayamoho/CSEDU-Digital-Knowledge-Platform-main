@@ -126,10 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (accessToken) {
         apiClient.setAccessToken(accessToken);
         await loadUser();
-      } else {
-        // No tokens, try to load user (will use mock mode if enabled)
+      } else if (localStorage.getItem('use_mock_mode') === 'true') {
+        // Mock mode fabricates a user locally and never calls the API.
         await loadUser();
       }
+      // Otherwise the visitor is anonymous. Calling /auth/me without a token
+      // just returns 401 and logs a console error on every public page load.
       setIsLoading(false);
     };
 

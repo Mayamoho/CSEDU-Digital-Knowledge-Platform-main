@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/lib/auth-context'
 import { LanguageProvider } from '@/lib/i18n'
 import { Toaster } from '@/components/ui/sonner'
@@ -63,7 +62,6 @@ export default function RootLayout({
             <FloatingChatWidget />
           </LanguageProvider>
         </AuthProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
