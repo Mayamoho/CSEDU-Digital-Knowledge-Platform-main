@@ -94,10 +94,7 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 		}
 
 		// Calculate fine amount
-		fineAmount := float64(daysOverdue) * ratePerDay
-		if fineAmount > maxFine {
-			fineAmount = maxFine
-		}
+		fineAmount := calculateFineAmount(daysOverdue, ratePerDay, maxFine)
 
 		// Update loan status to overdue
 		_, err = pool.Exec(ctx, `
@@ -157,6 +154,21 @@ func calculateFines(pool *pgxpool.Pool, ratePerDay, maxFine float64) {
 
 	log.Printf("Fine calculation complete: %d loans processed, %d fines created, %d updated", 
 		processed, created, updated)
+}
+
+// calculateFineAmount converts an overdue duration into a payable amount.
+// Extracted from the DB loop so the money rule is unit-testable without a
+// database: linear accrual per day, hard-capped at MAX_FINE_PER_LOAN_BDT.
+func calculateFineAmount(daysOverdue int, ratePerDay, maxFine float64) float64 {
+	if daysOverdue < 1 {
+		// Any overdue at all — even under a full day — incurs one period.
+		daysOverdue = 1
+	}
+	amount := float64(daysOverdue) * ratePerDay
+	if amount > maxFine {
+		return maxFine
+	}
+	return amount
 }
 
 func getEnv(key, fallback string) string {

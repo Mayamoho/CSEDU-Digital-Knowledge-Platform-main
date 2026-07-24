@@ -18,7 +18,55 @@ env:
   OWNER: mayamoho
 
 jobs:
+  # Quality gate. Nothing is built or deployed unless static analysis and the
+  # Go unit tests pass, so a broken main never reaches the VM.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: api/go.sum
+
+      - name: go vet (static analysis)
+        working-directory: ./api
+        run: go vet ./...
+
+      - name: go test (unit)
+        working-directory: ./api
+        run: go test ./... -covermode=atomic -coverprofile=coverage.out
+
+      - name: Coverage summary
+        working-directory: ./api
+        run: |
+          go tool cover -func=coverage.out | tail -20
+          echo "### Go coverage" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: api/coverage.out
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: RAG service tests
+        working-directory: ./rag
+        run: |
+          pip install --quiet pytest httpx pydantic-settings
+          pytest -q test_keyword_extractor.py
+
+      - name: Frontend typecheck
+        run: |
+          npm ci --prefer-offline --no-audit --legacy-peer-deps
+          npx tsc --noEmit
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
