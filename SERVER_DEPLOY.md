@@ -140,16 +140,28 @@ curl -s  http://localhost:8080/api/v1/health        # JSON
 
 ## 4. Updating the app (GitHub workflow)
 
-After you push new commits from your laptop:
+**Normally you do nothing.** Pushing to `main` runs the GitHub Actions
+pipeline (`.github/workflows/deploy.yml`): it runs the tests, builds the four
+images on GitHub's runners, pushes them to GHCR, then SSHes into the VM to apply
+migrations, pull the images, restart the stack and health-check it. Roughly
+3-4 minutes end to end. Watch it in the repo's Actions tab.
+
+To deploy by hand — Actions is down, or you want to redeploy without a new
+commit — SSH in and run:
 
 ```bash
 cd ~/csedu-platform
-./deploy.sh
+./quick-update.sh              # pull main, then deploy
+./quick-update.sh --no-pull    # deploy the working tree as-is
 ```
 
-That's it. The script does `git reset --hard origin/main`, rebuilds
-only what changed, and brings the stack back up. Your `.env` is
-preserved (it lives outside Git).
+`quick-update.sh` just calls `scripts/deploy-remote.sh`, which is the same
+script CI executes, so a manual deploy and an automated one do exactly the same
+thing: apply every migration in `infra/db/migrations/`, pull (or build) the
+images, restart, and wait for `/` and `/api/v1/health` to return 200.
+
+`deploy.sh` is for **first-time** setup only — it clones the repo and creates
+`.env`. Your `.env` is never touched by either path; it lives outside Git.
 
 ---
 

@@ -1,65 +1,27 @@
-# Quick update script for server deployment
-# Run this on the server at ~/csedu-platform
+#!/usr/bin/env bash
+#
+# Manual update, run ON the VM from ~/csedu-platform.
+#
+# Normally you do not need this: pushing to main runs the GitHub Actions
+# pipeline, which tests, builds the images and deploys them in a few minutes.
+# Use this when Actions is unavailable, or to redeploy without a new commit.
+#
+# The real work lives in scripts/deploy-remote.sh — the same script CI runs, so
+# a manual deploy and an automated one do exactly the same thing. This file used
+# to carry its own hard-coded migration list, which drifted: it named two
+# migrations that do not exist and missed the ones added later.
+#
+# Usage:
+#   ./quick-update.sh              # pull main, then deploy
+#   ./quick-update.sh --no-pull    # deploy the working tree as-is
 
-set -e
+set -euo pipefail
+cd "$(dirname "$0")"
 
-echo "======================================"
-echo "CSEDU Platform - Quick Update"
-echo "======================================"
+if [ "${1:-}" != "--no-pull" ]; then
+  echo "==> pulling latest main"
+  git fetch origin
+  git reset --hard origin/main
+fi
 
-# Pull latest changes
-echo ""
-echo "1. Pulling latest changes from git..."
-git fetch origin
-git reset --hard origin/main
-
-# Apply pending DB migrations (idempotent).
-# lock_timeout: a DDL migration (e.g. CREATE UNIQUE INDEX) must never wait
-# forever on a lock held by a leaked RAG transaction — that hangs the whole
-# deploy. Abort the statement after 5s and move on instead of blocking.
-# statement_timeout caps any single slow migration at 60s.
-echo ""
-echo "1b. Applying database migrations..."
-MIGRATIONS="002_media_url_format 005_book_topics 006_rag_index_state \
-   007_barcodes 008_notifications_role_requests 009_ingestion_status \
-   010_catalog_isbn_unique 011_hold_notified_at 012_bangla_fts \
-   013_reviews 014_role_request_verification"
-for m in $MIGRATIONS; do
-  echo "   - $m"
-  docker compose -f docker-compose.prod.yml exec -T \
-    -e PGOPTIONS='-c lock_timeout=5000 -c statement_timeout=60000' postgres \
-    psql -U csedu_user -d csedu_platform < "infra/db/migrations/${m}.sql" || true
-done
-
-# Rebuild frontend, API and RAG service with all fixes.
-echo ""
-echo "2. Cleaning Docker cache..."
-docker builder prune -f 2>/dev/null || true
-
-echo "   Rebuilding frontend, API, RAG and workers..."
-docker compose -f docker-compose.prod.yml build frontend api rag ingestion-worker fine-worker
-
-# Restart the stack. Workers are included so email-sending code and
-# updated SMTP credentials in .env are picked up (env_file is only
-# re-read when a container is (re)created, not on plain `restart`).
-echo ""
-echo "3. Restarting services..."
-docker compose -f docker-compose.prod.yml up -d nginx frontend api rag ingestion-worker fine-worker
-
-# Show status
-echo ""
-echo "4. Checking status..."
-docker compose -f docker-compose.prod.yml ps
-
-echo ""
-echo "======================================"
-echo "Update complete!"
-echo ""
-echo "Access your app at: http://20.195.127.226:8080"
-echo ""
-echo "Check logs with:"
-echo "  docker compose -f docker-compose.prod.yml logs -f frontend"
-echo "  docker compose -f docker-compose.prod.yml logs -f api"
-echo "  docker compose -f docker-compose.prod.yml logs -f rag"
-echo "  docker compose -f docker-compose.prod.yml logs -f nginx"
-echo "======================================"
+exec bash scripts/deploy-remote.sh "${IMAGE_TAG:-latest}"
