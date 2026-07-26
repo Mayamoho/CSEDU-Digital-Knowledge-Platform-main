@@ -183,7 +183,7 @@ Push to `main`. GitHub Actions runs the test gate, builds four images
 (frontend, api, rag, fine-worker) on its own runners, pushes them to GHCR, then
 connects to the VM over SSH to apply migrations, pull the new images, restart the
 stack and smoke-check the site. See `SERVER_DEPLOY.md` for first-time server
-setup and `DEPLOYMENT.md` for alternatives.
+setup.
 
 Production publishes exactly one host port (8080) — the VM is shared with other
 teams. A host-level nginx terminates TLS for `devops.farefin.com` and proxies to
