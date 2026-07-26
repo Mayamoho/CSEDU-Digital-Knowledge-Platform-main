@@ -102,6 +102,11 @@ In `.env`, replace every `CHANGE_ME_*` / `PUT_YOUR_*_KEY_HERE`:
 - `GROQ_API_KEY` — your Groq API key
 - `GEMINI_API_KEY` — your Gemini API key
 
+`COOKIE_SECURE` defaults to `true`, which is right for the HTTPS domain. If you
+are reaching the site over plain HTTP (`http://<VM_IP>:8080`) while setting up,
+set `COOKIE_SECURE=false` — browsers refuse to store a `Secure` cookie on an
+insecure origin, so sessions would drop on every page reload.
+
 Save and exit. **Do NOT commit `.env`.**
 
 ### 3.2 Run the deploy script

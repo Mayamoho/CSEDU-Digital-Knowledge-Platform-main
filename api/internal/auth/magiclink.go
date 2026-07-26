@@ -130,6 +130,9 @@ func (h *Handler) MagicVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	SetSessionCookies(w, tokens.AccessToken,
+		time.Now().Add(time.Duration(tokens.ExpiresIn)*time.Second), tokens.RefreshToken)
+
 	// Fragment token delivery, same as the OAuth callback. Target the real
 	// Next.js route: app/(auth)/callback → URL "/callback" (the "(auth)" group
 	// is not part of the path).

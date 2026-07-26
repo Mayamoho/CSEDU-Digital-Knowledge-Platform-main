@@ -69,6 +69,7 @@ type ChatResponse struct {
 	ModelUsed        string     `json:"model_used"`
 	ResponseTime     string     `json:"response_time"`
 	SessionID        string     `json:"session_id"`
+	MessageID        string     `json:"message_id,omitempty"`
 	DetectedLanguage string     `json:"detected_language,omitempty"`
 	QueryRewritten   bool       `json:"query_rewritten,omitempty"`
 }
@@ -123,6 +124,16 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FR-AI-018 / SDD §6.4: reject obvious instruction-override attempts before
+	// they reach the LLM. Defence in depth — the grounded prompt is the real
+	// mitigation, but there is no reason to spend a Groq call on a jailbreak.
+	if detectPromptInjection(req.Query) {
+		aiBlockedQueries.Inc()
+		writeError(w, http.StatusBadRequest,
+			"This request looks like an attempt to change the assistant's instructions. Ask about the platform's resources instead.")
+		return
+	}
+
 	// Generate session ID if not provided
 	sessionID := req.SessionID
 	if sessionID == "" {
@@ -159,6 +170,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 				var cr ragQueryResponse
 				if json.Unmarshal([]byte(cached), &cr) == nil {
 					ragResp = &cr
+					aiCacheHits.Inc()
 				}
 			}
 		}
@@ -192,20 +204,26 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		citations = append(citations, citation)
 	}
 
+	elapsed := time.Since(startTime)
+
 	// Store chat message for history
-	if err := h.storeChatMessage(r.Context(), sessionID, userID, req.Query, ragResp.Response, ragResp.SourceDocIDs, ragResp.ModelUsed); err != nil {
+	messageID, err := h.storeChatMessage(r.Context(), sessionID, userID, req.Query,
+		ragResp.Response, ragResp.SourceDocIDs, ragResp.ModelUsed, int(elapsed.Milliseconds()))
+	if err != nil {
 		log.Printf("Failed to store chat message: %v", err)
 		// Don't fail the request, just log it
 	}
 
-	responseTime := time.Since(startTime).String()
+	// FR-AI-015: response time and per-model usage are exported to Prometheus.
+	observeQuery(ragResp.ModelUsed, elapsed)
 
 	writeJSON(w, http.StatusOK, ChatResponse{
 		Response:         ragResp.Response,
 		Sources:          citations,
 		ModelUsed:        ragResp.ModelUsed,
-		ResponseTime:     responseTime,
+		ResponseTime:     elapsed.String(),
 		SessionID:        sessionID,
+		MessageID:        messageID,
 		DetectedLanguage: ragResp.DetectedLanguage,
 		QueryRewritten:   ragResp.QueryRewritten,
 	})
@@ -234,6 +252,16 @@ func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FR-AI-018 / SDD §6.4: reject obvious instruction-override attempts before
+	// they reach the LLM. Defence in depth — the grounded prompt is the real
+	// mitigation, but there is no reason to spend a Groq call on a jailbreak.
+	if detectPromptInjection(req.Query) {
+		aiBlockedQueries.Inc()
+		writeError(w, http.StatusBadRequest,
+			"This request looks like an attempt to change the assistant's instructions. Ask about the platform's resources instead.")
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming unsupported")
@@ -250,6 +278,7 @@ func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 	roleTier, _ := authpkg.GetRoleTier(r)
 	history := h.recentHistory(r.Context(), sessionID, userID, 10)
+	startTime := time.Now()
 
 	// Open the RAG stream.
 	ragReq := ragQueryRequest{
@@ -336,8 +365,18 @@ func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 
 	// Persist the assembled exchange (best-effort — never fail the request).
 	if answer := full.String(); answer != "" {
-		if err := h.storeChatMessage(r.Context(), sessionID, userID, req.Query, answer, sourceIDs, modelUsed); err != nil {
+		elapsed := time.Since(startTime)
+		messageID, err := h.storeChatMessage(r.Context(), sessionID, userID, req.Query,
+			answer, sourceIDs, modelUsed, int(elapsed.Milliseconds()))
+		if err != nil {
 			log.Printf("Failed to store streamed chat message: %v", err)
+		}
+		observeQuery(modelUsed, elapsed)
+		// Trailing event so the widget knows which row to attach a rating to
+		// (FR-AI-016). Sent after `done`; clients that ignore it are unaffected.
+		if messageID != "" {
+			fmt.Fprintf(w, "event: stored\ndata: {\"message_id\":%q}\n\n", messageID)
+			flusher.Flush()
 		}
 	}
 }
@@ -400,29 +439,26 @@ func (h *Handler) Summarize(w http.ResponseWriter, r *http.Request) {
 	// Get user role for access control
 	roleTier, _ := authpkg.GetRoleTier(r)
 
-	// Get document title
-	title, err := h.getItemTitle(r.Context(), req.ItemID)
+	// FR-AI-003 requires a 100-300 word summary carrying at least 3 key points,
+	// so summarisation runs through the structured insights path rather than a
+	// free-form RAG question. `key_points` is additive — existing callers that
+	// only read `summary` are unaffected.
+	result, status, err := h.itemInsights(r.Context(), req.ItemID, "summary", language, roleTier)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "document not found")
-		return
-	}
-
-	// Create a summarization query
-	summaryQuery := fmt.Sprintf("Please provide a comprehensive summary of the document titled '%s'", title)
-
-	// Call RAG service with the item context
-	ragResp, err := h.callRAGService(r.Context(), summaryQuery, roleTier, language, "", false, nil)
-	if err != nil {
-		log.Printf("RAG service call failed for summarization: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to generate summary")
+		if status >= 500 {
+			log.Printf("Summarization failed for %s: %v", req.ItemID, err)
+		}
+		writeError(w, status, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"item_id":           req.ItemID,
-		"summary":           ragResp.Response,
-		"model_used":        ragResp.ModelUsed,
-		"detected_language": ragResp.DetectedLanguage,
+		"item_id":    req.ItemID,
+		"summary":    result.Summary,
+		"key_points": result.KeyPoints,
+		"word_count": result.WordCount,
+		"model_used": result.ModelUsed,
+		"cached":     result.Cached,
 	})
 }
 
@@ -512,14 +548,19 @@ func (h *Handler) recentHistory(ctx context.Context, sessionID, userID string, l
 	return turns
 }
 
-// storeChatMessage stores chat interaction in database
-func (h *Handler) storeChatMessage(ctx context.Context, sessionID, userID, query, response string, sourceDocIDs []string, modelUsed string) error {
-	_, err := h.db.Exec(ctx,
-		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, source_doc_ids, model_used, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-		sessionID, userID, query, response, sourceDocIDs, modelUsed,
-	)
-	return err
+// storeChatMessage stores a chat interaction and returns its message_id, which
+// the client needs in order to rate the answer later (FR-AI-016). latencyMS is
+// the end-to-end time this answer took, kept for the AI metrics view
+// (FR-AI-015).
+func (h *Handler) storeChatMessage(ctx context.Context, sessionID, userID, query, response string, sourceDocIDs []string, modelUsed string, latencyMS int) (string, error) {
+	var messageID string
+	err := h.db.QueryRow(ctx,
+		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, source_doc_ids, model_used, latency_ms, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		 RETURNING message_id::text`,
+		sessionID, userID, query, response, sourceDocIDs, modelUsed, latencyMS,
+	).Scan(&messageID)
+	return messageID, err
 }
 
 // getChatHistory retrieves chat history for a session

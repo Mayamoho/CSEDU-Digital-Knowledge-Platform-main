@@ -171,6 +171,11 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Also establish the HttpOnly session, so the SPA does not have to keep the
+	// access token in reachable storage for the rest of the session.
+	SetSessionCookies(w, tokens.AccessToken,
+		time.Now().Add(time.Duration(tokens.ExpiresIn)*time.Second), tokens.RefreshToken)
+
 	// Deliver tokens to the SPA via the URL fragment. The fragment is never
 	// sent to any server, so tokens stay out of access logs and Referer.
 	frag := url.Values{}

@@ -1,0 +1,47 @@
+name: E2E
+
+# End-to-end tests (SDD §8.3) run against a deployed environment, so they are
+# kept out of the deploy gate on purpose: they need the whole stack up, and a
+# browser test going flaky must never be able to block a release. Run them on
+# demand after a deploy, and nightly to catch drift.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Environment to test
+        required: false
+        default: https://devops.farefin.com
+  schedule:
+    - cron: '30 2 * * *'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --legacy-peer-deps
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://devops.farefin.com' }}
+          E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+          E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+          E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

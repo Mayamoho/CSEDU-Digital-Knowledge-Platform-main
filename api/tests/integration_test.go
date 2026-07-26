@@ -1,0 +1,336 @@
+//go:build integration
+
+// Integration tests (SDD §8.2).
+//
+// These exercise handlers against a real PostgreSQL — the unit tests already
+// cover pure logic, and the bugs that actually reached production here were SQL
+// ones (a text/uuid cast, an array parameter inferred as text) that only a real
+// database can catch.
+//
+// Run:
+//
+//	TEST_DATABASE_URL=postgres://csedu_user:pass@localhost:5432/csedu_test \
+//	  go test -tags=integration ./tests/...
+//
+// Without TEST_DATABASE_URL the whole file skips, so `go test ./...` stays
+// green on a laptop with no database.
+package tests
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/csedu/platform/api/internal/ai"
+	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/media"
+	"github.com/csedu/platform/api/internal/middleware"
+)
+
+var pool *pgxpool.Pool
+
+func TestMain(m *testing.M) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		os.Exit(0) // nothing to integrate against
+	}
+	var err error
+	pool, err = pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		panic("cannot connect to TEST_DATABASE_URL: " + err.Error())
+	}
+	defer pool.Close()
+	os.Exit(m.Run())
+}
+
+// userSeq keeps seeded emails unique, so calling seedUser twice in one test
+// really does produce two different people.
+var userSeq atomic.Int64
+
+// seedUser creates a throwaway user and returns its id plus a valid bearer token.
+func seedUser(t *testing.T, role string) (string, string) {
+	t.Helper()
+	var userID string
+	email := fmt.Sprintf("it-%s-%d@test.local",
+		strings.ReplaceAll(t.Name(), "/", "-"), userSeq.Add(1))
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO users (email, name, role_tier) VALUES ($1, 'Integration Test', $2)
+		 ON CONFLICT (email) DO UPDATE SET role_tier = EXCLUDED.role_tier
+		 RETURNING user_id::text`, email, role).Scan(&userID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM users WHERE user_id = $1`, userID)
+	})
+
+	token, _, err := authpkg.IssueAccessToken(userID, role)
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	return userID, token
+}
+
+// seedItem creates a published media item owned by userID.
+func seedItem(t *testing.T, userID, itemType, title string) string {
+	t.Helper()
+	var itemID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO media_items (title, item_type, format, status, access_tier, created_by)
+		 VALUES ($1, $2, 'pdf', 'published', 'public', $3) RETURNING item_id::text`,
+		title, itemType, userID).Scan(&itemID); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO media_metadata (item_id, abstract, keywords, tags, language)
+		 VALUES ($1, 'original abstract', ARRAY['graphs'], ARRAY['algorithms'], 'en')`,
+		itemID); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM media_items WHERE item_id = $1`, itemID)
+	})
+	return itemID
+}
+
+func authed(req *http.Request, token string) *http.Request {
+	req.Header.Set("Authorization", "Bearer "+token)
+	return req
+}
+
+// TestVersionHistoryRoundTrip is the FR-TXX-015 acceptance criteria end to end:
+// an edit is tracked, the previous version is retrievable, and restoring it
+// brings the old values back.
+func TestVersionHistoryRoundTrip(t *testing.T) {
+	userID, token := seedUser(t, "researcher")
+	itemID := seedItem(t, userID, "research", "Original Title")
+
+	h := media.NewHandler(pool, nil, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Patch("/media/{itemId}/metadata", h.UpdateMetadata)
+	r.Get("/media/{itemId}/versions", h.ListVersions)
+	r.Post("/media/{itemId}/versions/{versionNo}/restore", h.RestoreVersion)
+
+	// 1. Edit the item.
+	body := `{"title":"Revised Title","abstract":"revised abstract","keywords":["trees"]}`
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("PATCH", "/media/"+itemID+"/metadata", strings.NewReader(body)), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 2. The pre-edit state must be retrievable.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("GET", "/media/"+itemID+"/versions", nil), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list versions returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var listed struct {
+		Versions []struct {
+			VersionNo int      `json:"version_no"`
+			Title     string   `json:"title"`
+			Abstract  string   `json:"abstract"`
+			Keywords  []string `json:"keywords"`
+		} `json:"versions"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode versions: %v", err)
+	}
+	if len(listed.Versions) != 1 {
+		t.Fatalf("want 1 archived version, got %d", len(listed.Versions))
+	}
+	if listed.Versions[0].Title != "Original Title" {
+		t.Errorf("version 1 title = %q, want %q", listed.Versions[0].Title, "Original Title")
+	}
+	if listed.Versions[0].Abstract != "original abstract" {
+		t.Errorf("version 1 abstract = %q, want the pre-edit value", listed.Versions[0].Abstract)
+	}
+
+	// 3. Restoring brings the old values back on the live row.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("POST", "/media/"+itemID+"/versions/1/restore", nil), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("restore returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var title, abstract string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT m.title, mm.abstract FROM media_items m
+		   JOIN media_metadata mm ON mm.item_id = m.item_id
+		  WHERE m.item_id = $1`, itemID).Scan(&title, &abstract); err != nil {
+		t.Fatalf("read restored item: %v", err)
+	}
+	if title != "Original Title" || abstract != "original abstract" {
+		t.Errorf("after restore got (%q, %q), want the original values", title, abstract)
+	}
+
+	// The restore is itself an edit, so it must be undoable too.
+	var count int
+	pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM media_versions WHERE item_id = $1`, itemID).Scan(&count)
+	if count != 2 {
+		t.Errorf("want 2 archived versions after restore, got %d", count)
+	}
+}
+
+// TestVersionHistoryDeniedForStrangers: history exposes abstracts and file
+// paths, so it must follow the same ownership rule as editing.
+func TestVersionHistoryDeniedForStrangers(t *testing.T) {
+	ownerID, _ := seedUser(t, "researcher")
+	itemID := seedItem(t, ownerID, "research", "Someone Else's Paper")
+
+	_, token := seedUser(t, "student")
+
+	h := media.NewHandler(pool, nil, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Get("/media/{itemId}/versions", h.ListVersions)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("GET", "/media/"+itemID+"/versions", nil), token))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("stranger got %d, want 403", rec.Code)
+	}
+}
+
+// TestAIFeedback covers FR-AI-016: a user can rate their own answer, cannot
+// rate someone else's, and an invalid rating is rejected.
+func TestAIFeedback(t *testing.T) {
+	userID, token := seedUser(t, "student")
+
+	var messageID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, model_used, latency_ms)
+		 VALUES (gen_random_uuid(), $1, 'what is a b-tree', 'a balanced tree', 'groq/test', 900)
+		 RETURNING message_id::text`, userID).Scan(&messageID); err != nil {
+		t.Fatalf("seed chat message: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM ai_chat_messages WHERE message_id = $1`, messageID)
+	})
+
+	h := ai.NewHandler(pool, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Post("/ai/feedback", h.SubmitFeedback)
+
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, authed(httptest.NewRequest("POST", "/ai/feedback", strings.NewReader(body)), token))
+		return rec
+	}
+
+	if rec := post(`{"message_id":"` + messageID + `","rating":1}`); rec.Code != http.StatusOK {
+		t.Fatalf("rating returned %d: %s", rec.Code, rec.Body.String())
+	}
+	var rating int16
+	pool.QueryRow(context.Background(),
+		`SELECT rating FROM ai_chat_messages WHERE message_id = $1`, messageID).Scan(&rating)
+	if rating != 1 {
+		t.Errorf("stored rating = %d, want 1", rating)
+	}
+
+	// Re-rating overwrites — a rating is an opinion, not an append-only log.
+	if rec := post(`{"message_id":"` + messageID + `","rating":-1,"note":"missed the point"}`); rec.Code != http.StatusOK {
+		t.Fatalf("re-rating returned %d", rec.Code)
+	}
+	var note *string
+	pool.QueryRow(context.Background(),
+		`SELECT rating, feedback_note FROM ai_chat_messages WHERE message_id = $1`,
+		messageID).Scan(&rating, &note)
+	if rating != -1 || note == nil || *note != "missed the point" {
+		t.Errorf("after re-rating got (%d, %v), want (-1, \"missed the point\")", rating, note)
+	}
+
+	if rec := post(`{"message_id":"` + messageID + `","rating":5}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("rating 5 returned %d, want 400", rec.Code)
+	}
+
+	// A different user must not be able to rate this message.
+	_, otherToken := seedUser(t, "student")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("POST", "/ai/feedback",
+		strings.NewReader(`{"message_id":"`+messageID+`","rating":1}`)), otherToken))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("foreign rating returned %d, want 404", rec.Code)
+	}
+}
+
+// TestRecommendationsRespectAccessTier covers FR-AI-017 together with
+// FR-AI-007: a suggestion must never point at something the user cannot open.
+func TestRecommendationsRespectAccessTier(t *testing.T) {
+	ownerID, _ := seedUser(t, "researcher")
+	restricted := seedItem(t, ownerID, "archive", "Restricted Dossier")
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE media_items SET access_tier = 'restricted' WHERE item_id = $1`, restricted); err != nil {
+		t.Fatalf("set access tier: %v", err)
+	}
+
+	_, token := seedUser(t, "student")
+
+	h := ai.NewHandler(pool, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Get("/ai/recommendations", h.Recommendations)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("GET", "/ai/recommendations", nil), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("recommendations returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var out struct {
+		Recommendations []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"recommendations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode recommendations: %v", err)
+	}
+	for _, item := range out.Recommendations {
+		if item.ID == restricted {
+			t.Fatalf("restricted item %q was recommended to a student", item.Title)
+		}
+	}
+}
+
+// TestCookieSessionAuthenticates is the non-SRS hardening: the HttpOnly session
+// cookie must authenticate a request on its own, with no Authorization header.
+func TestCookieSessionAuthenticates(t *testing.T) {
+	_, token := seedUser(t, "student")
+
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Get("/probe", func(w http.ResponseWriter, req *http.Request) {
+		id, ok := authpkg.GetUserID(req)
+		if !ok || id == "" {
+			t.Error("handler ran without a user id in context")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/probe", nil)
+	req.AddCookie(&http.Cookie{Name: authpkg.AccessCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("cookie-only request returned %d, want 200", rec.Code)
+	}
+
+	// And no credentials at all must still be rejected.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/probe", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous request returned %d, want 401", rec.Code)
+	}
+}

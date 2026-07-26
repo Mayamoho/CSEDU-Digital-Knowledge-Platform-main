@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { BookOpen, Calendar, Users, User, ExternalLink, Github, Globe, Smartphone, Download, Edit, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { ResourceInsights } from "@/components/ai-chat/resource-insights";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -199,6 +200,9 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* FR-AI-010: structured extraction over this document */}
+      <ResourceInsights itemId={project.item_id} kind="project" />
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

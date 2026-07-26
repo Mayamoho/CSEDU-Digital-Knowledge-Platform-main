@@ -18,7 +18,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2 } from "lucide-react";
+import { FileText, Clock, CheckCircle, AlertCircle, Eye, Trash2, History } from "lucide-react";
+import { VersionHistory } from "@/components/media/version-history";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -135,6 +136,7 @@ export function MyUploadsContent() {
     const config = statusConfig[derivedStatus] ?? statusConfig.draft;
     const StatusIcon = config.icon;
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
 
     const resolvePaperId = async (): Promise<string | undefined> => {
       if (item.paper_id) return item.paper_id;
@@ -317,6 +319,15 @@ export function MyUploadsContent() {
               <Button variant="outline" size="sm" onClick={handleViewDetails}>
                 {derivedStatus === 'rejected' ? "Edit Paper" : "View Details"}
               </Button>
+              {/* FR-TXX-015: every edit to this item is retrievable here. */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistory((v) => !v)}
+              >
+                <History className="mr-1 h-4 w-4" />
+                {showHistory ? "Hide History" : "History"}
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -349,6 +360,12 @@ export function MyUploadsContent() {
               </AlertDialog>
             </div>
           </div>
+
+          {showHistory && (
+            <div className="mt-4 border-t pt-4">
+              <VersionHistory itemId={item.item_id} onRestored={reloadUploads} />
+            </div>
+          )}
         </CardContent>
       </Card>
     );

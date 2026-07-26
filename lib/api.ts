@@ -267,6 +267,8 @@ export interface ChatResponse {
   model_used: string;
   response_time: string;
   session_id: string;
+  // Row this answer was stored as; needed to attach a rating (FR-AI-016).
+  message_id?: string;
   detected_language?: string;
   query_rewritten?: boolean;
 }
@@ -319,16 +321,12 @@ export interface SearchParams {
 }
 
 class APIClient {
+  // Kept in memory only. The durable session lives in the HttpOnly `csedu_access`
+  // cookie the API sets at login, which script on this page cannot read — so an
+  // XSS bug can no longer walk off with a usable token. Every request below
+  // sends credentials, so a page load with an empty in-memory token is still
+  // authenticated by the cookie.
   private accessToken: string | null = null;
-
-  constructor() {
-    // Restore the token synchronously on the client so requests fired by
-    // components that mount before AuthProvider's effect runs (e.g. research
-    // grid/detail views) are still authenticated.
-    if (typeof window !== 'undefined') {
-      this.accessToken = localStorage.getItem('csedu_access_token');
-    }
-  }
 
   setAccessToken(token: string | null) {
     this.accessToken = token;
@@ -349,6 +347,7 @@ class APIClient {
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
+      credentials: 'include',
       headers,
     });
 
@@ -493,6 +492,7 @@ class APIClient {
     }
 
     const response = await fetch(`${API_BASE_URL}/media/upload`, {
+      credentials: 'include',
       method: 'POST',
       headers,
       body: formData,
@@ -515,6 +515,7 @@ class APIClient {
     formData.append('file', file);
 
     const response = await fetch(`${API_BASE_URL}/media/${itemId}/file`, {
+      credentials: 'include',
       method: 'POST',
       headers,
       body: formData,
@@ -632,6 +633,7 @@ class APIClient {
     formData.append('file', file);
 
     const response = await fetch(`${API_BASE_URL}/role-requests/evidence`, {
+      credentials: 'include',
       method: 'POST',
       headers,
       body: formData,
@@ -651,7 +653,7 @@ class APIClient {
     if (this.accessToken) {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
-    const response = await fetch(`${API_BASE_URL}/admin/role-requests/${requestId}/evidence`, { headers });
+    const response = await fetch(`${API_BASE_URL}/admin/role-requests/${requestId}/evidence`, { headers, credentials: 'include' });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Could not load evidence' }));
       throw new Error(error.message || 'Could not load evidence');
@@ -693,6 +695,7 @@ class APIClient {
     }
 
     const response = await fetch(`${API_BASE_URL}/admin/catalog/import`, {
+      credentials: 'include',
       method: 'POST',
       headers,
       body: formData,
@@ -833,6 +836,7 @@ class APIClient {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
     const resp = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      credentials: 'include',
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -852,16 +856,60 @@ class APIClient {
     return this.request<ChatHistoryResponse>(`/ai/chat/history/${sessionId}`);
   }
 
-  async summarizeDocument(itemId: string, language?: string): Promise<{ 
-    item_id: string; 
+  async summarizeDocument(itemId: string, language?: string): Promise<{
+    item_id: string;
     summary: string;
+    key_points: string[];
+    word_count: number;
     model_used: string;
-    detected_language?: string;
+    cached?: boolean;
   }> {
     return this.request('/ai/summarize', {
       method: 'POST',
       body: JSON.stringify({ item_id: itemId, language: language || 'auto' }),
     });
+  }
+
+  // FR-AI-009 / FR-AI-010: structured extraction. `kind` defaults to the item's
+  // own type, so a research paper returns findings/methodology/conclusion and a
+  // student project returns technologies/skills/outcome.
+  async getInsights(
+    itemId: string,
+    kind: 'auto' | 'summary' | 'research' | 'project' = 'auto',
+    language?: string
+  ): Promise<AIInsights> {
+    return this.request<AIInsights>('/ai/insights', {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId, kind, language: language || 'auto' }),
+    });
+  }
+
+  // FR-AI-016: rate an answer the assistant gave. `messageId` comes back from
+  // sendChatMessage, or from the trailing `stored` event on the SSE stream.
+  async submitAIFeedback(messageId: string, rating: 1 | -1, note?: string): Promise<{ message: string }> {
+    return this.request('/ai/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ message_id: messageId, rating, note }),
+    });
+  }
+
+  // FR-AI-017
+  async getRecommendations(): Promise<{ recommendations: Recommendation[]; personalized: boolean }> {
+    return this.request('/ai/recommendations');
+  }
+
+  // FR-AI-015 (administrators only)
+  async getAIMetrics(): Promise<AIMetrics> {
+    return this.request<AIMetrics>('/admin/ai-metrics');
+  }
+
+  // FR-TXX-015: content version history
+  async getVersions(itemId: string): Promise<{ item_id: string; versions: MediaVersion[] }> {
+    return this.request(`/media/${itemId}/versions`);
+  }
+
+  async restoreVersion(itemId: string, versionNo: number): Promise<{ message: string; restored_from: number }> {
+    return this.request(`/media/${itemId}/versions/${versionNo}/restore`, { method: 'POST' });
   }
 
   // Research Papers
@@ -1023,6 +1071,68 @@ class APIClient {
       body: JSON.stringify({ rating, body }),
     });
   }
+}
+
+export interface AIInsights {
+  item_id: string;
+  kind: string;
+  title: string;
+  item_type: string;
+  summary: string;
+  word_count: number;
+  key_points: string[];
+  key_findings?: string[];
+  methodology?: string;
+  conclusion?: string;
+  technologies?: string[];
+  skills?: string[];
+  outcome?: string;
+  model_used: string;
+  cached?: boolean;
+}
+
+export interface Recommendation {
+  kind: 'book' | 'media';
+  id: string;
+  title: string;
+  subtitle?: string;
+  item_type?: string;
+  reason: string;
+  available?: boolean;
+}
+
+export interface AIMetrics {
+  summary: {
+    total_queries: number;
+    queries_24h: number;
+    queries_7d: number;
+    unique_users: number;
+    sessions: number;
+    avg_latency_ms: number | null;
+    p95_latency_ms: number | null;
+    rated_helpful: number;
+    rated_unhelpful: number;
+    answers_with_citations: number;
+  };
+  by_model: { model: string; count: number; avg_latency_ms: number | null }[];
+  daily: { day: string; count: number }[];
+  recent_unhelpful: { query: string; model_used: string; note: string | null; created_at: string }[];
+}
+
+export interface MediaVersion {
+  version_no: number;
+  title: string;
+  abstract: string;
+  keywords: string[];
+  tags: string[];
+  language: string;
+  access_tier: string;
+  status: string;
+  format: string;
+  file_path: string | null;
+  change_note: string;
+  changed_by: string | null;
+  created_at: string;
 }
 
 export interface ResourceReview {

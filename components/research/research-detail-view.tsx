@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { FileText, Calendar, User, Download, Edit, ArrowLeft, AlertCircle, Send, CheckCircle, XCircle, BookOpen, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { ResourceInsights } from "@/components/ai-chat/resource-insights";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -312,6 +313,9 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* FR-AI-009: structured extraction over this document */}
+      <ResourceInsights itemId={paper.item_id} kind="research" />
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

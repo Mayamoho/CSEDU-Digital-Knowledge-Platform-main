@@ -37,12 +37,16 @@ demo/repository links, and staff approval before publication.
 **AI assistant (RAG)** — hybrid retrieval (pgvector cosine similarity fused with
 PostgreSQL full-text search) over every indexed document, grounded answers with
 citations, streamed token-by-token over Server-Sent Events, Groq primary with
-Gemini fallback, per-document summarisation.
+Gemini fallback, structured per-document insights (100-300 word summary with key
+points; findings/methodology/conclusion for papers; technologies/skills/outcome
+for projects), personalised recommendations, thumbs-up/down feedback on every
+answer, prompt-injection screening, and an administrator performance dashboard.
 
 **Platform** — JWT authentication with Google OAuth 2.0 and passwordless
 magic-link sign-in, five-tier RBAC, verified role-upgrade requests, in-app and
 email notifications, resource ratings and reviews, full English/বাংলা interface,
-append-only audit log, Prometheus metrics.
+append-only audit log, full version history on every uploaded resource with
+one-click restore, Prometheus metrics.
 
 ## 2. Tech stack
 
@@ -80,21 +84,19 @@ The application that is deployed lives at the repository root.
 ├── rag/                 # Python FastAPI RAG service (embed, retrieve, generate)
 ├── infra/
 │   ├── db/init.sql      # Schema, constraints, indexes, seed data
-│   ├── db/migrations/   # Idempotent numbered migrations 001–014
+│   ├── db/migrations/   # Idempotent numbered migrations
 │   ├── nginx/           # Reverse proxy, rate limits, security headers
 │   └── prometheus/      # Scrape configuration
 ├── docs/
 │   ├── api/             # Postman collection + environments
 │   └── diagrams/        # Mermaid sources + index.html viewer
+├── e2e/                 # Playwright end-to-end specs
 ├── docker-compose.yml            # Development
 ├── docker-compose.prod.yml       # Production (only host port 8080 published)
 ├── docker-compose.ghcr.yml       # Production overlay: pull prebuilt images
-└── .github/workflows/deploy.yml  # test → build → push to GHCR → deploy → smoke
+├── .github/workflows/deploy.yml  # test → integration → build → deploy → smoke
+└── .github/workflows/e2e.yml     # Playwright suite (manual + nightly)
 ```
-
-> `frontend/` and `backend/` are an earlier restructuring experiment. They are
-> **not** deployed and are excluded from the TypeScript build; treat the root
-> tree as the source of truth.
 
 ## 4. Local setup
 
@@ -135,6 +137,7 @@ Neither file contains real secrets — both ship with placeholders.
 | `MINIO_USER` / `MINIO_PASSWORD` / `MINIO_BUCKET` / `MINIO_ENDPOINT` | Object storage |
 | `JWT_SECRET` | HS256 signing key — generate with `openssl rand -hex 32` |
 | `JWT_EXPIRY_HOURS` / `REFRESH_EXPIRY_DAYS` | Token lifetimes (default 1 hour / 7 days) |
+| `COOKIE_SECURE` / `COOKIE_SAMESITE` | Session-cookie flags. `COOKIE_SECURE=true` (default) requires HTTPS — set `false` only when serving over plain HTTP |
 | `FINE_RATE_BDT_PER_DAY` / `MAX_FINE_PER_LOAN_BDT` / `FINE_BLOCK_THRESHOLD_BDT` / `LOAN_PERIOD_DAYS` | Circulation and fine policy |
 | `GROQ_API_KEY` / `GROQ_MODEL_*` | Primary LLM |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | Fallback LLM and query rewriting |
@@ -149,19 +152,45 @@ Neither file contains real secrets — both ship with placeholders.
 # Go — unit tests with coverage
 cd api && go vet ./... && go test ./... -cover
 
+# Go — integration tests against a real PostgreSQL
+docker run -d --name pg -e POSTGRES_USER=csedu_user -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=csedu_platform -p 55432:5432 pgvector/pgvector:pg16
+psql "postgres://csedu_user:test@localhost:55432/csedu_platform" -f infra/db/init.sql
+for f in infra/db/migrations/*.sql; do \
+  psql "postgres://csedu_user:test@localhost:55432/csedu_platform" -f "$f"; done
+cd api && TEST_DATABASE_URL="postgres://csedu_user:test@localhost:55432/csedu_platform" \
+  go test -tags=integration ./tests/...
+
 # Python — RAG keyword extraction
 cd rag && pytest -q test_keyword_extractor.py
 
 # Frontend — type checking and production build
-npx tsc --noEmit
+npm run typecheck
 npm run build
+
+# End-to-end — needs a running stack
+BASE_URL=http://localhost:8080 npm run test:e2e
 ```
 
-Covered today: JWT issuing and validation, including tampered-payload,
-`alg=none`, foreign-secret and expiry rejection; the `Authenticate` /
-`RequireRole` / `OptionalAuth` middleware chain against the full RBAC matrix; the
-fine calculation rule and its cap; barcode normalisation; RAG keyword parsing.
-The same commands run in CI on every push to `main` and gate the image build.
+**Unit** — JWT issuing and validation, including tampered-payload, `alg=none`,
+foreign-secret and expiry rejection; the `Authenticate` / `RequireRole` /
+`OptionalAuth` middleware chain against the full RBAC matrix; the fine
+calculation rule and its cap; barcode normalisation; prompt-injection detection
+including unicode-obfuscated variants; RAG keyword parsing.
+
+**Integration** — version history round trip (edit → retrieve → restore) and its
+ownership rule; AI feedback storage, overwrite and cross-user rejection;
+recommendations honouring access tiers; cookie-only session authentication.
+These need a database, so they are tagged `integration` and skip without
+`TEST_DATABASE_URL`.
+
+**End-to-end** — sign-in, session cookie is HttpOnly and survives reload,
+anonymous browsing of public modules, anonymous rejection from protected routes,
+AI guardrails, the administrator metrics dashboard, and the Bangla toggle.
+
+Unit and integration tests run in CI on every push to `main` and gate the image
+build. E2E runs against a deployed environment on demand and nightly — a browser
+test must never be able to block a release.
 
 ## 6. API documentation
 
@@ -194,7 +223,9 @@ stays on the private Docker network.
 
 - Passwords hashed with bcrypt (cost 12); accounts lock for 15 minutes after 5
   consecutive failed sign-ins.
-- Access tokens are short-lived JWTs; refresh tokens are stored hashed and can be
+- Access tokens are short-lived JWTs delivered as **HttpOnly** cookies, so page
+  script cannot read a session even if an XSS bug lands; the `Authorization`
+  header is still accepted for API clients. Refresh tokens are stored hashed and
   revoked server-side at logout.
 - Role tier is read from the **signed token**, never from the request body.
   Self-registration always forces `student`; privileged roles come only from an
@@ -208,6 +239,8 @@ stays on the private Docker network.
   Actions secrets.
 - Every privileged action writes to an append-only `audit_log` table protected by
   a row-level-security INSERT-only policy.
+- Assistant queries are screened for instruction-override attempts before any
+  LLM call, and blocked attempts are counted in `ai_blocked_queries_total`.
 
 ## 9. Team
 

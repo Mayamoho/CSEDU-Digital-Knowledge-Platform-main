@@ -275,6 +275,11 @@ func main() {
 				r.Patch("/{itemId}/metadata", mediaHandler.UpdateMetadata)
 				r.Post("/{itemId}/file", mediaHandler.ReplaceFile)
 				r.Delete("/{itemId}", mediaHandler.DeleteMedia)
+
+				// FR-TXX-015 content versioning
+				r.Get("/{itemId}/versions", mediaHandler.ListVersions)
+				r.Get("/{itemId}/versions/{versionNo}", mediaHandler.GetVersion)
+				r.Post("/{itemId}/versions/{versionNo}/restore", mediaHandler.RestoreVersion)
 			})
 		})
 
@@ -293,6 +298,7 @@ func main() {
 				r.Use(middleware.RequireRole("administrator"))
 				r.Patch("/users/{userId}/role", adminHandler.UpdateUserRole)
 				r.Get("/audit-log", adminHandler.ListAuditLog)
+				r.Get("/ai-metrics", aiHandler.AdminMetrics) // FR-AI-015
 
 				// Role-upgrade request queue
 				r.Get("/role-requests", rolesHandler.ListAll)
@@ -334,6 +340,9 @@ func main() {
 				r.Post("/chat/stream", aiHandler.ChatStream)
 				r.Get("/chat/history/{sessionId}", aiHandler.GetChatHistory)
 				r.Post("/summarize", aiHandler.Summarize)
+				r.Post("/insights", aiHandler.Insights)              // FR-AI-009 / FR-AI-010
+				r.Post("/feedback", aiHandler.SubmitFeedback)        // FR-AI-016
+				r.Get("/recommendations", aiHandler.Recommendations) // FR-AI-017
 			})
 		})
 

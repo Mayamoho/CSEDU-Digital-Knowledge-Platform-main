@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
 )
@@ -12,12 +11,12 @@ import (
 // Requests without a valid token are rejected with 401.
 func Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header := r.Header.Get("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
+		// Bearer header first, HttpOnly session cookie second.
+		tokenStr := authpkg.TokenFromRequest(r)
+		if tokenStr == "" {
 			http.Error(w, `{"message":"missing or invalid Authorization header"}`, http.StatusUnauthorized)
 			return
 		}
-		tokenStr := strings.TrimPrefix(header, "Bearer ")
 		claims, err := authpkg.Validate(tokenStr)
 		if err != nil {
 			http.Error(w, `{"message":"invalid or expired token"}`, http.StatusUnauthorized)
@@ -56,9 +55,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 // OptionalAuth injects user info if a valid token is present, but does not block the request.
 func OptionalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header := r.Header.Get("Authorization")
-		if strings.HasPrefix(header, "Bearer ") {
-			tokenStr := strings.TrimPrefix(header, "Bearer ")
+		if tokenStr := authpkg.TokenFromRequest(r); tokenStr != "" {
 			if claims, err := authpkg.Validate(tokenStr); err == nil {
 				ctx := context.WithValue(r.Context(), authpkg.CtxUserID, claims.UserID)
 				ctx = context.WithValue(ctx, authpkg.CtxRoleTier, claims.RoleTier)

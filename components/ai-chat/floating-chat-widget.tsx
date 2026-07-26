@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, X, Send, MessageCircle, Sparkles, BookOpen } from "lucide-react";
+import { Bot, X, Send, MessageCircle, Sparkles, BookOpen, ThumbsUp, ThumbsDown } from "lucide-react";
 import { apiClient, ChatResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -19,6 +19,9 @@ interface Message {
   timestamp: Date;
   citations?: string[];
   citationIds?: string[];
+  // FR-AI-016: the stored row this answer became, and the rating the user gave.
+  messageId?: string;
+  rating?: 1 | -1;
 }
 
 export function FloatingChatWidget() {
@@ -64,6 +67,20 @@ export function FloatingChatWidget() {
       setMessages(allMessages);
     } catch (error) {
       console.error("Failed to load chat history:", error);
+    }
+  };
+
+  // FR-AI-016. Optimistic: the thumb fills immediately and only reverts if the
+  // API rejects it, because a rating is feedback, not a transaction.
+  const rateMessage = async (localId: string, messageId: string, rating: 1 | -1) => {
+    setMessages((prev) => prev.map((m) => (m.id === localId ? { ...m, rating } : m)));
+    try {
+      await apiClient.submitAIFeedback(messageId, rating);
+      toast.success(rating === 1 ? "Thanks for the feedback" : "Thanks — we'll use this to improve");
+    } catch (error) {
+      console.error("Failed to submit AI feedback:", error);
+      setMessages((prev) => prev.map((m) => (m.id === localId ? { ...m, rating: undefined } : m)));
+      toast.error("Could not save your feedback");
     }
   };
 
@@ -150,6 +167,13 @@ export function FloatingChatWidget() {
                     : m,
                 ),
               );
+            } else if (event === "stored") {
+              const o = JSON.parse(data);
+              if (o.message_id) {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, messageId: o.message_id } : m)),
+                );
+              }
             } else if (event === "token") {
               const o = JSON.parse(data);
               if (o.text) applyToken(o.text);
@@ -177,6 +201,7 @@ export function FloatingChatWidget() {
             timestamp: new Date(),
             citations: response.sources ? response.sources.map((s) => s.title) : [],
             citationIds: response.sources ? response.sources.map((s) => s.item_id) : [],
+            messageId: response.message_id,
           },
         ]);
       } catch (error) {
@@ -336,8 +361,35 @@ export function FloatingChatWidget() {
                           </div>
                         )}
                         
-                        <div className="mt-1 text-xs opacity-70">
-                          {message.timestamp.toLocaleTimeString()}
+                        <div className="mt-1 flex items-center gap-2 text-xs opacity-70">
+                          <span>{message.timestamp.toLocaleTimeString()}</span>
+                          {/* FR-AI-016: rate the answer. Only shown once the
+                              exchange has been stored and has an id to attach
+                              the rating to. */}
+                          {message.role === "assistant" && message.messageId && (
+                            <span className="ml-auto flex items-center gap-1">
+                              <button
+                                type="button"
+                                aria-label="Helpful answer"
+                                onClick={() => rateMessage(message.id, message.messageId!, 1)}
+                                className={`rounded p-0.5 transition-colors hover:bg-foreground/10 ${
+                                  message.rating === 1 ? "text-green-600" : ""
+                                }`}
+                              >
+                                <ThumbsUp className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Unhelpful answer"
+                                onClick={() => rateMessage(message.id, message.messageId!, -1)}
+                                className={`rounded p-0.5 transition-colors hover:bg-foreground/10 ${
+                                  message.rating === -1 ? "text-destructive" : ""
+                                }`}
+                              >
+                                <ThumbsDown className="h-3 w-3" />
+                              </button>
+                            </span>
+                          )}
                         </div>
                       </div>
 

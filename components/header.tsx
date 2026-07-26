@@ -30,6 +30,7 @@ import {
   Bot,
   ArrowUpCircle,
   Inbox,
+  Activity,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -231,6 +232,12 @@ export function Header() {
                       <Link href="/admin/role-requests" className="cursor-pointer">
                         <Inbox className="mr-2 h-4 w-4" />
                         Role Requests
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/ai-metrics" className="cursor-pointer">
+                        <Activity className="mr-2 h-4 w-4" />
+                        AI Performance
                       </Link>
                     </DropdownMenuItem>
                   </>

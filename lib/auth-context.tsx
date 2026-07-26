@@ -17,8 +17,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const ACCESS_TOKEN_KEY = "csedu_access_token";
-const REFRESH_TOKEN_KEY = "csedu_refresh_token";
+// The access and refresh tokens are NOT persisted here. The API sets them as
+// HttpOnly cookies that page script cannot read, which is the whole point: an
+// XSS bug on any page can no longer steal a working session. We keep the access
+// token in memory for the lifetime of the tab (so explicit Authorization
+// headers still work), and only the non-secret expiry timestamp on disk, so the
+// refresh timer survives a reload.
 const TOKEN_EXPIRY_KEY = "csedu_token_expiry";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -26,15 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const saveTokens = useCallback((tokens: AuthTokens) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
     localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + tokens.expires_in * 1000));
     apiClient.setAccessToken(tokens.access_token);
   }, []);
 
   const clearTokens = useCallback(() => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(TOKEN_EXPIRY_KEY);
     apiClient.setAccessToken(null);
   }, []);
@@ -102,15 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshAuth = useCallback(async () => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!refreshToken) {
-      clearTokens();
-      setUser(null);
-      return;
-    }
-
     try {
-      const tokens = await apiClient.refreshToken(refreshToken);
+      // Empty string: the server falls back to the HttpOnly refresh cookie,
+      // which is the only copy of the refresh token the browser now holds.
+      const tokens = await apiClient.refreshToken("");
       saveTokens(tokens);
       await loadUser();
     } catch {
@@ -121,17 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      // Check for existing tokens and load user (works for both dev and production)
-      const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-      if (accessToken) {
-        apiClient.setAccessToken(accessToken);
-        await loadUser();
-      } else if (localStorage.getItem('use_mock_mode') === 'true') {
-        // Mock mode fabricates a user locally and never calls the API.
+      // On a fresh page load the in-memory token is gone, but the session
+      // cookie is not — so ask the API who we are whenever a session looks
+      // plausible. The expiry stamp is the marker that a login happened; an
+      // anonymous visitor has none and we skip the call, so public pages do not
+      // fire a pointless 401 on every load.
+      const hasSession = localStorage.getItem(TOKEN_EXPIRY_KEY) !== null;
+      if (hasSession || localStorage.getItem('use_mock_mode') === 'true') {
         await loadUser();
       }
-      // Otherwise the visitor is anonymous. Calling /auth/me without a token
-      // just returns 401 and logs a console error on every public page load.
       setIsLoading(false);
     };
 

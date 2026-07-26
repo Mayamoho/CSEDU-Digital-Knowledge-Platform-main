@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ReviewNotifications } from "@/components/research/review-notifications";
+import { Recommendations } from "@/components/dashboard/recommendations";
 
 interface DashboardStats {
   activeLoans: number;
@@ -117,6 +118,11 @@ export function DashboardContent() {
           <ReviewNotifications />
         </div>
       )}
+
+      {/* FR-AI-017: personalized suggestions */}
+      <div className="mb-8">
+        <Recommendations />
+      </div>
 
       {/* Quick Actions + Profile */}
       <div className="grid gap-6 lg:grid-cols-3 mb-8">

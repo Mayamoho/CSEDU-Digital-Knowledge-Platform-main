@@ -65,8 +65,57 @@ jobs:
           npm ci --prefer-offline --no-audit --legacy-peer-deps
           npx tsc --noEmit
 
+  # Integration gate (SDD §8.2). Runs the handlers against a real PostgreSQL,
+  # which is where this codebase's actual bugs have lived: uuid/text casts,
+  # array parameter inference, cascade behaviour. Blocks the deploy on failure.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: csedu_user
+          POSTGRES_PASSWORD: csedu_test_password
+          POSTGRES_DB: csedu_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U csedu_user -d csedu_platform"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: api/go.sum
+
+      - name: Apply schema and migrations
+        env:
+          PGPASSWORD: csedu_test_password
+        run: |
+          psql -h localhost -U csedu_user -d csedu_platform -v ON_ERROR_STOP=1 -q -f infra/db/init.sql
+          # Same semantics as scripts/deploy-remote.sh: each migration is
+          # idempotent, and one that no longer applies to a fresh init.sql is
+          # skipped rather than failing the run. The tests are the real gate —
+          # if a migration that matters did not land, they fail.
+          for f in infra/db/migrations/*.sql; do
+            if psql -h localhost -U csedu_user -d csedu_platform -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>&1; then
+              echo "    ok      $f"
+            else
+              echo "    skipped $f"
+            fi
+          done
+
+      - name: go test (integration)
+        working-directory: ./api
+        env:
+          TEST_DATABASE_URL: postgres://csedu_user:csedu_test_password@localhost:5432/csedu_platform
+          JWT_SECRET: integration_test_secret_at_least_32_characters_long
+        run: go test -tags=integration ./tests/... -v
+
   build:
-    needs: test
+    needs: [test, integration]
     runs-on: ubuntu-latest
     permissions:
       contents: read

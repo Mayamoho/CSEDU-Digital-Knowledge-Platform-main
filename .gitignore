@@ -35,3 +35,9 @@ tsconfig.tsbuildinfo
 # Local scratch
 Screenshot from *.png
 logs-*.csv
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

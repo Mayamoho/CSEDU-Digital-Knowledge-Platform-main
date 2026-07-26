@@ -654,6 +654,10 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FR-TXX-015: archive the pre-edit state before touching anything, so the
+	// previous version stays retrievable.
+	h.snapshotVersion(r.Context(), id, userID, "metadata edit")
+
 	// Update title if provided
 	if req.Title != nil && *req.Title != "" {
 		_, err := h.db.Exec(r.Context(),
@@ -846,6 +850,9 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "file storage failed")
 		return
 	}
+
+	// FR-TXX-015: keep the superseded file reference in the version history.
+	h.snapshotVersion(r.Context(), id, userID, "file replaced")
 
 	if _, err := h.db.Exec(r.Context(),
 		`UPDATE media_items SET file_path = $1, format = $2 WHERE item_id = $3`,

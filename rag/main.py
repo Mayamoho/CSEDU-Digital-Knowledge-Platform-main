@@ -277,6 +277,37 @@ async def query_rag_stream(request: QueryRequest):
     )
 
 
+class InsightsRequest(BaseModel):
+    item_id: str
+    # summary  -> FR-AI-003, research -> FR-AI-009, project -> FR-AI-010.
+    # "auto" picks from the item's own type.
+    kind: str = Field(default="auto", pattern="^(auto|summary|research|project)$")
+    language: str = Field(default="auto", pattern="^(en|bn|auto)$")
+
+
+@app.post("/insights")
+async def item_insights(request: InsightsRequest):
+    """Structured extraction over one indexed item (FR-AI-003/009/010)."""
+    import insights as insights_mod
+
+    _t0 = time.monotonic()
+    try:
+        result = await insights_mod.generate(
+            request.item_id, request.kind, request.language
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Insights error for {request.item_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Insights failed: {str(e)}")
+
+    RAG_QUERIES.labels(language=request.language, model=result["model_used"]).inc()
+    RAG_LATENCY.observe(time.monotonic() - _t0)
+    return result
+
+
 @app.post("/embed", response_model=EmbedResponse)
 async def embed_text(request: EmbedRequest):
     """

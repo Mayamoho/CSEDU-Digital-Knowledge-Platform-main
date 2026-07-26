@@ -217,6 +217,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	SetSessionCookies(w, accessToken, exp, refreshToken)
+
 	writeJSON(w, http.StatusCreated, registerResponse{
 		User: userResponse{
 			UserID:    userID,
@@ -298,6 +300,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	SetSessionCookies(w, accessToken, exp, refreshToken)
+
 	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -311,9 +315,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.RefreshToken == "" {
+		// Cookie-only clients never see the refresh token, so fall back to it.
+		if c, err := r.Cookie(RefreshCookieName); err == nil {
+			req.RefreshToken = c.Value
+		}
 	}
 	if req.RefreshToken == "" {
 		writeError(w, http.StatusBadRequest, "refresh_token is required")
@@ -357,6 +364,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not store token")
 		return
 	}
+
+	SetSessionCookies(w, accessToken, exp, newRefresh)
 
 	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  accessToken,
@@ -498,6 +507,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 			`UPDATE refresh_tokens SET revoked = true
 			 WHERE user_id = $1 AND revoked = false`, userID.(string))
 	}
+	ClearSessionCookies(w)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
 
