@@ -33,6 +33,8 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", abstract: "", web_url: "", github_repo: "", app_download: "", course_code: "" });
+  // Optional replacement artefact (report, slide deck, source archive, APK).
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
 
   useEffect(() => {
     apiClient.getProject(projectId)
@@ -56,7 +58,14 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
         github_repo: editForm.github_repo || undefined,
         app_download: editForm.app_download || undefined,
       });
-      toast.success("Project updated successfully");
+      // Upload after the metadata write: if the file fails, the text edits are
+      // already saved and the user only has to retry the upload.
+      if (replacementFile) {
+        await apiClient.replaceMediaFile(project.item_id, replacementFile);
+      }
+
+      toast.success(replacementFile ? "Project and file updated" : "Project updated successfully");
+      setReplacementFile(null);
       setEditOpen(false);
       const updated = await apiClient.getProject(projectId);
       setProject(updated);
@@ -234,6 +243,21 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
             <div className="space-y-1">
               <Label>App Download Link</Label>
               <Input value={editForm.app_download} onChange={e => setEditForm(f => ({ ...f, app_download: e.target.value }))} placeholder="https://" />
+            </div>
+            <div className="space-y-1">
+              <Label>Replace Project File (optional)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.docx,.doc,.pptx,.ppt,.zip,.apk,.mp4,.png,.jpg,.jpeg"
+                onChange={e => setReplacementFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Report, slides, source archive or build. Replaces the current file and
+                re-indexes the project for the AI assistant. Leave empty to keep it.
+              </p>
+              {replacementFile && (
+                <p className="text-xs text-muted-foreground">New file: {replacementFile.name}</p>
+              )}
             </div>
           </div>
           <DialogFooter>
