@@ -26,8 +26,8 @@ import (
 	"github.com/csedu/platform/api/internal/middleware"
 	"github.com/csedu/platform/api/internal/notify"
 	"github.com/csedu/platform/api/internal/projects"
-	"github.com/csedu/platform/api/internal/reviews"
 	"github.com/csedu/platform/api/internal/research"
+	"github.com/csedu/platform/api/internal/reviews"
 	"github.com/csedu/platform/api/internal/roles"
 	"github.com/csedu/platform/api/internal/storage"
 )
@@ -115,7 +115,7 @@ func main() {
 			allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
 		}
 	}
-	
+
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
@@ -178,7 +178,7 @@ func main() {
 				r.With(middleware.OptionalAuth).Get("/", libraryHandler.ListCatalog)
 				r.With(middleware.OptionalAuth).Get("/topics", libraryHandler.ListTopics)
 				r.With(middleware.OptionalAuth).Get("/{itemId}", libraryHandler.GetCatalogItem)
-				
+
 				// Librarian/admin POST access
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.Authenticate)
@@ -194,7 +194,7 @@ func main() {
 				r.Post("/", libraryHandler.BorrowBook)
 				r.Get("/", libraryHandler.ListLoans)
 				r.Post("/{loanId}/return", libraryHandler.ReturnBook)
-				
+
 				// Staff/admin only
 				r.With(middleware.RequireRole("librarian", "administrator")).Get("/all", libraryHandler.ListAllLoans)
 			})
@@ -299,6 +299,7 @@ func main() {
 				r.Patch("/users/{userId}/role", adminHandler.UpdateUserRole)
 				r.Get("/audit-log", adminHandler.ListAuditLog)
 				r.Get("/ai-metrics", aiHandler.AdminMetrics) // FR-AI-015
+				r.Get("/ai-metrics/detail", aiHandler.AdminMetricsDetail)
 
 				// Role-upgrade request queue
 				r.Get("/role-requests", rolesHandler.ListAll)

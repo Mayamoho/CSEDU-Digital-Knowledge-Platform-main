@@ -34,6 +34,7 @@ import (
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/media"
 	"github.com/csedu/platform/api/internal/middleware"
+	"github.com/csedu/platform/api/internal/versioning"
 )
 
 var pool *pgxpool.Pool
@@ -332,5 +333,89 @@ func TestCookieSessionAuthenticates(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest("GET", "/probe", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous request returned %d, want 401", rec.Code)
+	}
+}
+
+// TestResearchEditIsVersioned is the regression for the bug this fixed: the
+// research and project edit dialogs write straight to media_items and
+// media_metadata, so version history stayed empty however many times an author
+// revised their work. Snapshotting only inside the media handler was not enough.
+func TestResearchEditIsVersioned(t *testing.T) {
+	userID, _ := seedUser(t, "researcher")
+	itemID := seedItem(t, userID, "research", "Draft One")
+
+	if versioning.Snapshot(context.Background(), pool, itemID, userID, "paper edited") == 0 {
+		t.Fatal("snapshot returned 0 — nothing was recorded")
+	}
+
+	// Apply the edit the way the research handler does.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE media_items SET title = 'Draft Two' WHERE item_id = $1`, itemID); err != nil {
+		t.Fatalf("apply edit: %v", err)
+	}
+
+	var no int
+	var title, note string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT version_no, title, change_note FROM media_versions
+		  WHERE item_id = $1 ORDER BY version_no DESC LIMIT 1`, itemID,
+	).Scan(&no, &title, &note); err != nil {
+		t.Fatalf("read version: %v", err)
+	}
+	if no != 1 || title != "Draft One" || note != "paper edited" {
+		t.Errorf("got v%d %q (%q), want v1 \"Draft One\" (\"paper edited\")", no, title, note)
+	}
+
+	// Version numbers must keep climbing across successive edits.
+	if second := versioning.Snapshot(context.Background(), pool, itemID, userID, "paper edited"); second != 2 {
+		t.Errorf("second snapshot = v%d, want v2", second)
+	}
+}
+
+// TestChatHistoryCarriesRating: a reopened conversation must still be ratable,
+// which means the history has to hand back message_id and any rating already
+// given. Without those the thumbs silently vanish on every reload.
+func TestChatHistoryCarriesRating(t *testing.T) {
+	userID, token := seedUser(t, "student")
+
+	var sessionID, messageID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, model_used, latency_ms, rating)
+		 VALUES (gen_random_uuid(), $1, 'q', 'a', 'groq/test', 100, 1)
+		 RETURNING session_id::text, message_id::text`, userID).Scan(&sessionID, &messageID); err != nil {
+		t.Fatalf("seed message: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM ai_chat_messages WHERE message_id = $1`, messageID)
+	})
+
+	h := ai.NewHandler(pool, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Get("/ai/chat/history/{sessionId}", h.GetChatHistory)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("GET", "/ai/chat/history/"+sessionID, nil), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("history returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var out struct {
+		Messages []struct {
+			MessageID string `json:"message_id"`
+			Rating    *int   `json:"rating"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	if len(out.Messages) != 1 {
+		t.Fatalf("want 1 message, got %d", len(out.Messages))
+	}
+	if out.Messages[0].MessageID != messageID {
+		t.Errorf("message_id = %q, want %q", out.Messages[0].MessageID, messageID)
+	}
+	if out.Messages[0].Rating == nil || *out.Messages[0].Rating != 1 {
+		t.Errorf("rating = %v, want 1", out.Messages[0].Rating)
 	}
 }

@@ -70,6 +70,22 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Flush keeps Server-Sent Events working through this wrapper.
+//
+// Both the audit and metrics middleware wrap every response in a statusWriter.
+// Embedding http.ResponseWriter does not carry http.Flusher across, so the AI
+// streaming handler's `w.(http.Flusher)` assertion failed and every streamed
+// chat returned "streaming unsupported" — the widget silently fell back to the
+// non-streaming endpoint, so answers appeared all at once instead of typing out.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying writer to http.ResponseController.
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 var uuidRE = regexp.MustCompile(
 	`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 

@@ -161,3 +161,136 @@ func (h *Handler) AdminMetrics(w http.ResponseWriter, r *http.Request) {
 		"prometheus_scrape": "/metrics",
 	})
 }
+
+// GET /api/v1/admin/ai-metrics/detail?panel=…&day=YYYY-MM-DD
+//
+// Backs the clickable cards and the clickable bars on the usage chart. A number
+// on a dashboard is only useful if you can ask what is behind it, so each panel
+// returns the rows that produced the figure rather than another aggregate.
+func (h *Handler) AdminMetricsDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	panel := r.URL.Query().Get("panel")
+
+	type row struct {
+		Primary   string `json:"primary"`
+		Secondary string `json:"secondary,omitempty"`
+		Count     int    `json:"count,omitempty"`
+		Meta      string `json:"meta,omitempty"`
+		Link      string `json:"link,omitempty"`
+	}
+	rows := []row{}
+
+	switch panel {
+	case "users":
+		// Who is actually using the assistant, busiest first.
+		q, err := h.db.Query(ctx, `
+			SELECT COALESCE(u.name, 'Deleted user'), COALESCE(u.email, '—'),
+			       COUNT(*)::int,
+			       to_char(MAX(m.created_at), 'YYYY-MM-DD HH24:MI')
+			FROM ai_chat_messages m
+			LEFT JOIN users u ON u.user_id = m.user_id
+			GROUP BY u.name, u.email
+			ORDER BY COUNT(*) DESC LIMIT 25`)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load users")
+			return
+		}
+		defer q.Close()
+		for q.Next() {
+			var it row
+			if q.Scan(&it.Primary, &it.Secondary, &it.Count, &it.Meta) == nil {
+				rows = append(rows, it)
+			}
+		}
+
+	case "helpful", "unhelpful":
+		rating := 1
+		if panel == "unhelpful" {
+			rating = -1
+		}
+		q, err := h.db.Query(ctx, `
+			SELECT m.query, COALESCE(m.feedback_note, ''), m.model_used,
+			       to_char(m.created_at, 'YYYY-MM-DD HH24:MI')
+			FROM ai_chat_messages m
+			WHERE m.rating = $1
+			ORDER BY m.created_at DESC LIMIT 25`, rating)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load feedback")
+			return
+		}
+		defer q.Close()
+		for q.Next() {
+			var it row
+			var model, at string
+			if q.Scan(&it.Primary, &it.Secondary, &model, &at) == nil {
+				it.Meta = at + " · " + model
+				rows = append(rows, it)
+			}
+		}
+
+	case "citations":
+		// Which documents the assistant actually leans on. Answers that cite
+		// nothing are the ones worth investigating, so they get a row too.
+		q, err := h.db.Query(ctx, `
+			SELECT mi.title, mi.item_type, COUNT(*)::int, mi.item_id::text
+			FROM ai_chat_messages m
+			CROSS JOIN LATERAL unnest(m.source_doc_ids) AS src(id)
+			JOIN media_items mi ON mi.item_id = src.id
+			GROUP BY mi.title, mi.item_type, mi.item_id
+			ORDER BY COUNT(*) DESC LIMIT 25`)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load citations")
+			return
+		}
+		defer q.Close()
+		for q.Next() {
+			var it row
+			var itemType, itemID string
+			if q.Scan(&it.Primary, &itemType, &it.Count, &itemID) == nil {
+				it.Secondary = itemType
+				switch itemType {
+				case "research":
+					it.Link = "/research/" + itemID
+				case "project":
+					it.Link = "/projects/" + itemID
+				default:
+					it.Link = "/archive/" + itemID
+				}
+				rows = append(rows, it)
+			}
+		}
+
+	case "day":
+		day := r.URL.Query().Get("day")
+		if day == "" {
+			writeError(w, http.StatusBadRequest, "day is required")
+			return
+		}
+		q, err := h.db.Query(ctx, `
+			SELECT m.query, COALESCE(u.name, 'Deleted user'), m.model_used,
+			       to_char(m.created_at, 'HH24:MI')
+			FROM ai_chat_messages m
+			LEFT JOIN users u ON u.user_id = m.user_id
+			WHERE date_trunc('day', m.created_at) = $1::date
+			ORDER BY m.created_at DESC LIMIT 50`, day)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load that day")
+			return
+		}
+		defer q.Close()
+		for q.Next() {
+			var it row
+			var model, at string
+			if q.Scan(&it.Primary, &it.Secondary, &model, &at) == nil {
+				it.Meta = at + " · " + model
+				rows = append(rows, it)
+			}
+		}
+
+	default:
+		writeError(w, http.StatusBadRequest, "unknown panel")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"panel": panel, "rows": rows})
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/versioning"
 )
 
 // FR-TXX-015 (Content Versioning): every edit is tracked and every previous
@@ -35,39 +36,11 @@ type versionResponse struct {
 	CreatedAt  string   `json:"created_at"`
 }
 
-// snapshotVersion copies the item's current state into media_versions.
-// Best-effort by design: history is an audit aid, so a failure here must never
-// block the edit the user actually asked for. Returns the version number
-// written (0 when nothing was recorded).
+// snapshotVersion delegates to the shared versioning package, which the
+// research and projects handlers use too — every path that edits an item must
+// record history, not just this one.
 func (h *Handler) snapshotVersion(ctx context.Context, itemID, userID, note string) int {
-	var next int
-	if err := h.db.QueryRow(ctx,
-		`SELECT COALESCE(MAX(version_no), 0) + 1 FROM media_versions WHERE item_id = $1`,
-		itemID).Scan(&next); err != nil {
-		return 0
-	}
-
-	var changedBy *string
-	if userID != "" {
-		changedBy = &userID
-	}
-
-	if _, err := h.db.Exec(ctx,
-		`INSERT INTO media_versions
-		   (item_id, version_no, title, abstract, keywords, tags, language,
-		    access_tier, status, format, file_path, change_note, changed_by)
-		 SELECT m.item_id, $2, m.title,
-		        COALESCE(mm.abstract, ''), COALESCE(mm.keywords, '{}'::text[]),
-		        COALESCE(mm.tags, '{}'::text[]), COALESCE(mm.language, 'en'),
-		        m.access_tier::text, m.status::text, m.format, m.file_path, $3, $4
-		 FROM media_items m
-		 LEFT JOIN media_metadata mm ON mm.item_id = m.item_id
-		 WHERE m.item_id = $1
-		 ON CONFLICT (item_id, version_no) DO NOTHING`,
-		itemID, next, note, changedBy); err != nil {
-		return 0
-	}
-	return next
+	return versioning.Snapshot(ctx, h.db, itemID, userID, note)
 }
 
 // canEditItem reports whether the caller owns the item or moderates the platform.

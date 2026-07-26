@@ -276,10 +276,12 @@ export interface ChatResponse {
 export interface ChatHistoryResponse {
   session_id: string;
   messages: Array<{
+    message_id: string;
     query: string;
     response: string;
     source_ids: string[];
     model_used: string;
+    rating: 1 | -1 | null;
     timestamp: string;
   }>;
 }
@@ -903,6 +905,16 @@ class APIClient {
     return this.request<AIMetrics>('/admin/ai-metrics');
   }
 
+  // Drill-down behind a stat card or a bar on the usage chart.
+  async getAIMetricsDetail(
+    panel: 'users' | 'helpful' | 'unhelpful' | 'citations' | 'day',
+    day?: string
+  ): Promise<{ panel: string; rows: AIMetricDetailRow[] }> {
+    const qs = new URLSearchParams({ panel });
+    if (day) qs.set('day', day);
+    return this.request(`/admin/ai-metrics/detail?${qs.toString()}`);
+  }
+
   // FR-TXX-015: content version history
   async getVersions(itemId: string): Promise<{ item_id: string; versions: MediaVersion[] }> {
     return this.request(`/media/${itemId}/versions`);
@@ -1117,6 +1129,14 @@ export interface AIMetrics {
   by_model: { model: string; count: number; avg_latency_ms: number | null }[];
   daily: { day: string; count: number }[];
   recent_unhelpful: { query: string; model_used: string; note: string | null; created_at: string }[];
+}
+
+export interface AIMetricDetailRow {
+  primary: string;
+  secondary?: string;
+  count?: number;
+  meta?: string;
+  link?: string;
 }
 
 export interface MediaVersion {

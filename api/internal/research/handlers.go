@@ -18,6 +18,7 @@ import (
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/mailer"
 	"github.com/csedu/platform/api/internal/notify"
+	"github.com/csedu/platform/api/internal/versioning"
 )
 
 type Handler struct {
@@ -730,6 +731,11 @@ func (h *Handler) UpdateResearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// FR-TXX-015: archive the pre-edit state. The edit dialog writes straight
+	// to media_items/media_metadata, so without this the item's history stays
+	// empty no matter how many times the author revises it.
+	versioning.Snapshot(ctx, h.db, itemID, userID, "paper edited")
 
 	// Update media_items
 	_, err = tx.Exec(ctx,

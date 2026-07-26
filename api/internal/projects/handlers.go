@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/versioning"
 )
 
 type Handler struct {
@@ -507,6 +508,7 @@ func (h *Handler) ApproveProject(w http.ResponseWriter, r *http.Request) {
 		"status":  newStatus,
 	})
 }
+
 // PUT /api/v1/projects/{projectId} — update student project
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := authpkg.GetUserID(r)
@@ -576,6 +578,11 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "you can only update your own projects")
 		return
 	}
+
+	// FR-TXX-015: archive the pre-edit state. The edit dialog writes straight
+	// to media_items/media_metadata, so without this the item's history stays
+	// empty no matter how many times the author revises it.
+	versioning.Snapshot(ctx, h.db, itemID, userID, "project edited")
 
 	// Update media_items
 	_, err = tx.Exec(ctx,

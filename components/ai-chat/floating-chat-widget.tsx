@@ -50,6 +50,10 @@ export function FloatingChatWidget() {
         timestamp: new Date(msg.timestamp),
         citations: msg.source_ids || [],
         citationIds: msg.source_ids || [],
+        // Carry the stored row id and any rating already given, so a reopened
+        // conversation stays ratable instead of losing its thumbs (FR-AI-016).
+        messageId: msg.message_id,
+        rating: msg.rating ?? undefined,
       }));
       
       // Add user messages (simplified - in production would store user queries too)

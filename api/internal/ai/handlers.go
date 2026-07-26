@@ -584,7 +584,7 @@ func (h *Handler) storeChatMessage(ctx context.Context, sessionID, userID, query
 // getChatHistory retrieves chat history for a session
 func (h *Handler) getChatHistory(ctx context.Context, sessionID, userID string) ([]map[string]any, error) {
 	rows, err := h.db.Query(ctx,
-		`SELECT query, response, source_doc_ids, model_used, created_at
+		`SELECT message_id::text, query, response, source_doc_ids, model_used, rating, created_at
 		 FROM ai_chat_messages
 		 WHERE session_id = $1 AND user_id = $2
 		 ORDER BY created_at ASC`,
@@ -597,19 +597,25 @@ func (h *Handler) getChatHistory(ctx context.Context, sessionID, userID string) 
 
 	var messages []map[string]any
 	for rows.Next() {
-		var query, response, modelUsed string
+		var messageID, query, response, modelUsed string
 		var createdAt time.Time
 		var sourceIDs []string
-		err := rows.Scan(&query, &response, &sourceIDs, &modelUsed, &createdAt)
+		var rating *int16
+		err := rows.Scan(&messageID, &query, &response, &sourceIDs, &modelUsed, &rating, &createdAt)
 		if err != nil {
 			continue
 		}
 
+		// message_id and rating travel with the history so a reopened
+		// conversation can still be rated, and an existing rating shows as
+		// already given instead of resetting (FR-AI-016).
 		messages = append(messages, map[string]any{
+			"message_id": messageID,
 			"query":      query,
 			"response":   response,
 			"source_ids": sourceIDs,
 			"model_used": modelUsed,
+			"rating":     rating,
 			"timestamp":  createdAt.Format(time.RFC3339),
 		})
 	}
