@@ -774,6 +774,18 @@ func (h *Handler) UpdateResearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Anyone holding a downloaded copy is now holding a superseded one, and the
+	// paper has just dropped out of the public listing. Tell them, in-app and by
+	// email. After the commit, so a notification failure cannot undo the edit.
+	if demoted {
+		notify.NotifyDownloaders(ctx, h.db, itemID, userID,
+			"A paper you downloaded has been revised",
+			fmt.Sprintf("The author has revised %q, so your downloaded copy is now out of date. "+
+				"The paper has returned to draft for review and is temporarily unavailable — "+
+				"we will tell you again as soon as the updated version is published.", req.Title),
+			"/research")
+	}
+
 	msg := "research paper updated successfully"
 	if demoted {
 		msg = "changes saved — the paper moved back to draft; submit it for review to publish again"
@@ -847,6 +859,16 @@ func (h *Handler) PublishResearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to commit transaction")
 		return
 	}
+
+	// Close the loop for readers told the paper was withdrawn for revision: the
+	// updated version is live again, so they can replace their copy.
+	var pubTitle string
+	_ = h.db.QueryRow(ctx, `SELECT title FROM media_items WHERE item_id = $1`, itemID).Scan(&pubTitle)
+	notify.NotifyDownloaders(ctx, h.db, itemID, userID,
+		"An updated version is now available",
+		fmt.Sprintf("The revised version of %q has been reviewed and published. "+
+			"Download it again to get the current version.", pubTitle),
+		"/research/"+paperID)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "research paper published successfully",

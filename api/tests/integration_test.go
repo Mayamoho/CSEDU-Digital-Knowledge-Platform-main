@@ -34,6 +34,7 @@ import (
 	authpkg "github.com/csedu/platform/api/internal/auth"
 	"github.com/csedu/platform/api/internal/media"
 	"github.com/csedu/platform/api/internal/middleware"
+	"github.com/csedu/platform/api/internal/notify"
 	"github.com/csedu/platform/api/internal/versioning"
 )
 
@@ -497,4 +498,56 @@ func TestCitationLinksResolveDetailIds(t *testing.T) {
 			t.Errorf("%q missing from the citations panel", title)
 		}
 	}
+}
+
+// TestDownloadNotifiesReaders covers the download-notification mechanism: a
+// reader who downloaded a paper is told when the author revises it, the author
+// is not told about their own edit, and someone who never downloaded it is left
+// alone.
+func TestDownloadNotifiesReaders(t *testing.T) {
+	authorID, _ := seedUser(t, "researcher")
+	readerID, _ := seedUser(t, "student")
+	bystanderID, _ := seedUser(t, "student")
+
+	itemID := seedItem(t, authorID, "research", "Shared Paper")
+
+	// The reader and the author both took a copy; the bystander did not.
+	notify.RecordDownload(context.Background(), pool, itemID, readerID)
+	notify.RecordDownload(context.Background(), pool, itemID, authorID)
+
+	// A repeat download must not create a second row — we notify people once.
+	notify.RecordDownload(context.Background(), pool, itemID, readerID)
+	var rows, count int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*)::int, COALESCE(MAX(download_count), 0)
+		   FROM media_downloads WHERE item_id = $1 AND user_id = $2`,
+		itemID, readerID).Scan(&rows, &count); err != nil {
+		t.Fatalf("read downloads: %v", err)
+	}
+	if rows != 1 || count != 2 {
+		t.Errorf("got %d row(s) with count %d, want 1 row counting 2 downloads", rows, count)
+	}
+
+	// Anonymous downloads have nobody to notify and must not be recorded.
+	notify.RecordDownload(context.Background(), pool, itemID, "")
+
+	notified := notify.NotifyDownloaders(context.Background(), pool, itemID, authorID,
+		"A paper you downloaded has been revised", "body text", "/research")
+	if notified != 1 {
+		t.Fatalf("notified %d people, want 1 (the reader, not the author)", notified)
+	}
+
+	assertNotified := func(userID string, want int, who string) {
+		var n int
+		pool.QueryRow(context.Background(),
+			`SELECT COUNT(*)::int FROM notifications
+			  WHERE user_id = $1 AND title = 'A paper you downloaded has been revised'`,
+			userID).Scan(&n)
+		if n != want {
+			t.Errorf("%s has %d notification(s), want %d", who, n, want)
+		}
+	}
+	assertNotified(readerID, 1, "reader")
+	assertNotified(authorID, 0, "author (excluded)")
+	assertNotified(bystanderID, 0, "bystander (never downloaded)")
 }

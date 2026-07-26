@@ -18,6 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	authpkg "github.com/csedu/platform/api/internal/auth"
+	"github.com/csedu/platform/api/internal/notify"
 	"github.com/csedu/platform/api/internal/storage"
 )
 
@@ -603,6 +604,12 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		contentType = "image/png"
 	case "gif":
 		contentType = "image/gif"
+	}
+
+	// Remember who took a copy, so they can be told if the author later revises
+	// it. Anonymous reads are not recorded — there is nobody to notify.
+	if userID, ok := authpkg.GetUserID(r); ok {
+		notify.RecordDownload(r.Context(), h.db, id, userID)
 	}
 
 	// ?inline=1 renders the file in the browser instead of forcing a download.
