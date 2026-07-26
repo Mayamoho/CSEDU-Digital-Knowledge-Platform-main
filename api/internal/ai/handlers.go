@@ -548,6 +548,24 @@ func (h *Handler) recentHistory(ctx context.Context, sessionID, userID string, l
 	return turns
 }
 
+// realDocIDs keeps only genuine media_items UUIDs.
+//
+// The retriever answers inventory questions ("how many books are in the
+// catalog?") with a synthesised chunk whose item_id is a label like
+// "inventory-catalog" rather than a row id. Passing that straight into the
+// UUID[] column fails the whole INSERT, which silently dropped every
+// inventory-backed answer from the history and the metrics. The citation still
+// reaches the client — only the stored provenance list is filtered.
+func realDocIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, err := uuid.Parse(id); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // storeChatMessage stores a chat interaction and returns its message_id, which
 // the client needs in order to rate the answer later (FR-AI-016). latencyMS is
 // the end-to-end time this answer took, kept for the AI metrics view
@@ -558,7 +576,7 @@ func (h *Handler) storeChatMessage(ctx context.Context, sessionID, userID, query
 		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, source_doc_ids, model_used, latency_ms, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
 		 RETURNING message_id::text`,
-		sessionID, userID, query, response, sourceDocIDs, modelUsed, latencyMS,
+		sessionID, userID, query, response, realDocIDs(sourceDocIDs), modelUsed, latencyMS,
 	).Scan(&messageID)
 	return messageID, err
 }
