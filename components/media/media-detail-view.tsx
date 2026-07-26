@@ -60,6 +60,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
     access_tier: "public",
     status: "published",
     language: "en",
+    external_url: "",
   });
 
   const loadItem = async () => {
@@ -76,6 +77,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         access_tier: data.access_tier || "public",
         status: data.status || "published",
         language: data.metadata?.language || "en",
+        external_url: data.external_url || "",
       });
     } catch (err) {
       console.error("Failed to load item:", err);
@@ -110,6 +112,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
         access_tier: editForm.access_tier,
         status: editForm.status,
         language: editForm.language,
+        external_url: editForm.external_url.trim(),
       });
       if (replacementFile) {
         await apiClient.replaceMediaFile(itemId, replacementFile);
@@ -338,6 +341,20 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
                   <SelectItem value="bn">বাংলা</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>External Link (optional)</Label>
+              <Input
+                type="url"
+                inputMode="url"
+                value={editForm.external_url}
+                onChange={e => setEditForm(f => ({ ...f, external_url: e.target.value }))}
+                placeholder="https://youtube.com/watch?v=… or any source URL"
+              />
+              <p className="text-xs text-muted-foreground">
+                For material hosted elsewhere — a video, a dataset, an external page.
+                Works with or without an uploaded file. Clear the box to remove the link.
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Replace File (optional)</Label>

@@ -551,3 +551,65 @@ func TestDownloadNotifiesReaders(t *testing.T) {
 	assertNotified(authorID, 0, "author (excluded)")
 	assertNotified(bystanderID, 0, "bystander (never downloaded)")
 }
+
+// TestUpdateExternalURL covers the archive edit form's link field: a valid link
+// is stored, a hostile scheme is rejected before it can render as a clickable
+// anchor, an empty string clears the link, and omitting the field leaves it be.
+func TestUpdateExternalURL(t *testing.T) {
+	userID, token := seedUser(t, "researcher")
+	itemID := seedItem(t, userID, "archive", "Linked Archive Item")
+
+	h := media.NewHandler(pool, nil, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Patch("/media/{itemId}/metadata", h.UpdateMetadata)
+
+	patch := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, authed(httptest.NewRequest("PATCH", "/media/"+itemID+"/metadata", strings.NewReader(body)), token))
+		return rec
+	}
+	current := func() *string {
+		var u *string
+		pool.QueryRow(context.Background(),
+			`SELECT external_url FROM media_items WHERE item_id = $1`, itemID).Scan(&u)
+		return u
+	}
+
+	if rec := patch(`{"external_url":"https://youtube.com/watch?v=abc"}`); rec.Code != http.StatusOK {
+		t.Fatalf("setting a link returned %d: %s", rec.Code, rec.Body.String())
+	}
+	if u := current(); u == nil || *u != "https://youtube.com/watch?v=abc" {
+		t.Errorf("stored link = %v, want the https URL", u)
+	}
+
+	// Omitting the field must not disturb the stored value.
+	if rec := patch(`{"title":"Linked Archive Item"}`); rec.Code != http.StatusOK {
+		t.Fatalf("title-only edit returned %d", rec.Code)
+	}
+	if u := current(); u == nil || *u != "https://youtube.com/watch?v=abc" {
+		t.Errorf("link changed on an unrelated edit: %v", u)
+	}
+
+	// A javascript: URL would become a clickable anchor on the item page.
+	for _, bad := range []string{
+		`{"external_url":"javascript:alert(1)"}`,
+		`{"external_url":"data:text/html,<script>alert(1)</script>"}`,
+		`{"external_url":"ftp://example.com/x"}`,
+	} {
+		if rec := patch(bad); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s returned %d, want 400", bad, rec.Code)
+		}
+	}
+	if u := current(); u == nil || *u != "https://youtube.com/watch?v=abc" {
+		t.Errorf("a rejected URL changed the stored value: %v", u)
+	}
+
+	// An empty string is the documented way to remove the link.
+	if rec := patch(`{"external_url":""}`); rec.Code != http.StatusOK {
+		t.Fatalf("clearing the link returned %d", rec.Code)
+	}
+	if u := current(); u != nil {
+		t.Errorf("link = %v after clearing, want NULL", *u)
+	}
+}

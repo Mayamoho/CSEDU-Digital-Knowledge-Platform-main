@@ -648,13 +648,14 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Title      *string  `json:"title"`
-		Abstract   *string  `json:"abstract"`
-		Keywords   []string `json:"keywords"`
-		Tags       []string `json:"tags"`
-		Language   *string  `json:"language"`
-		AccessTier *string  `json:"access_tier"`
-		Status     *string  `json:"status"`
+		Title       *string  `json:"title"`
+		Abstract    *string  `json:"abstract"`
+		Keywords    []string `json:"keywords"`
+		Tags        []string `json:"tags"`
+		Language    *string  `json:"language"`
+		AccessTier  *string  `json:"access_tier"`
+		Status      *string  `json:"status"`
+		ExternalURL *string  `json:"external_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid body")
@@ -688,6 +689,30 @@ func (h *Handler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
 			`UPDATE media_items SET access_tier = $1 WHERE item_id = $2`,
 			*req.AccessTier, id); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not update access tier")
+			return
+		}
+	}
+
+	// Update the external link if provided. An empty string clears it, which is
+	// how an archive entry that gained a real file drops its placeholder link;
+	// omitting the field entirely leaves the current value alone.
+	if req.ExternalURL != nil {
+		trimmed := strings.TrimSpace(*req.ExternalURL)
+		var urlArg *string
+		if trimmed != "" {
+			// Only http(s) — a javascript: or data: URL here would render as a
+			// clickable link on the item page.
+			lower := strings.ToLower(trimmed)
+			if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+				writeError(w, http.StatusBadRequest, "external URL must start with http:// or https://")
+				return
+			}
+			urlArg = &trimmed
+		}
+		if _, err := h.db.Exec(r.Context(),
+			`UPDATE media_items SET external_url = $1 WHERE item_id = $2`,
+			urlArg, id); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update external URL")
 			return
 		}
 	}
