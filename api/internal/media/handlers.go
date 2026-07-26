@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -247,26 +246,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Link-only and image items are queued too: the indexer cannot read their
 	// contents, but it embeds their title/abstract/keywords/URL so the assistant
 	// can still say what they are.
-	if h.redis != nil {
-		storedPath := ""
-		if storedKey != nil {
-			storedPath = *storedKey
-		}
-		jobData := map[string]any{
-			"item_id":   itemID,
-			"file_path": storedPath,
-			"format":    ext,
-			"user_id":   userID,
-			"timestamp": time.Now().Format(time.RFC3339),
-		}
-		jobJSON, _ := json.Marshal(jobData)
-
-		// Push to Redis queue
-		if err := h.redis.LPush(r.Context(), "ingestion_jobs", jobJSON).Err(); err != nil {
-			// Log error but don't fail the upload
-			fmt.Printf("Failed to queue ingestion job: %v\n", err)
-		}
+	storedPath := ""
+	if storedKey != nil {
+		storedPath = *storedKey
 	}
+	h.queueIngestion(r.Context(), itemID, storedPath, ext, userID)
 
 	writeJSON(w, http.StatusCreated, mediaItemResponse{
 		ItemID:      itemID,
@@ -895,19 +879,7 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-queue ingestion so search/RAG picks up the new file content
-	if h.redis != nil {
-		jobData := map[string]any{
-			"item_id":   id,
-			"file_path": key,
-			"format":    ext,
-			"user_id":   userID,
-			"timestamp": time.Now().Format(time.RFC3339),
-		}
-		jobJSON, _ := json.Marshal(jobData)
-		if err := h.redis.LPush(r.Context(), "ingestion_jobs", jobJSON).Err(); err != nil {
-			fmt.Printf("Failed to queue ingestion job: %v\n", err)
-		}
-	}
+	h.queueIngestion(r.Context(), id, key, ext, userID)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message":   "file replaced successfully",
