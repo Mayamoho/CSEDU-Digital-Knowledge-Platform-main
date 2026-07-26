@@ -419,3 +419,82 @@ func TestChatHistoryCarriesRating(t *testing.T) {
 		t.Errorf("rating = %v, want 1", out.Messages[0].Rating)
 	}
 }
+
+// TestCitationLinksResolveDetailIds is the regression for cited papers and
+// projects rendering "not found" on the metrics dashboard: the citation panel
+// linked everything by item_id, but /research/{id} expects a paper_id and
+// /projects/{id} a project_id.
+func TestCitationLinksResolveDetailIds(t *testing.T) {
+	userID, token := seedUser(t, "administrator")
+
+	paperItem := seedItem(t, userID, "research", "Cited Paper")
+	projectItem := seedItem(t, userID, "project", "Cited Project")
+	archiveItem := seedItem(t, userID, "archive", "Cited Archive Doc")
+
+	var paperID, projectID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO research_papers (item_id, authors) VALUES ($1, ARRAY['A'])
+		 RETURNING paper_id::text`, paperItem).Scan(&paperID); err != nil {
+		t.Fatalf("seed paper: %v", err)
+	}
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO student_projects (item_id, academic_year) VALUES ($1, 2025)
+		 RETURNING project_id::text`, projectItem).Scan(&projectID); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
+	// One chat message citing all three.
+	var messageID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO ai_chat_messages (session_id, user_id, query, response, model_used, source_doc_ids)
+		 VALUES (gen_random_uuid(), $1, 'cite everything', 'here', 'groq/test',
+		         ARRAY[$2,$3,$4]::uuid[])
+		 RETURNING message_id::text`,
+		userID, paperItem, projectItem, archiveItem).Scan(&messageID); err != nil {
+		t.Fatalf("seed chat message: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM ai_chat_messages WHERE message_id = $1`, messageID)
+	})
+
+	h := ai.NewHandler(pool, nil)
+	r := chi.NewRouter()
+	r.Use(middleware.Authenticate)
+	r.Get("/admin/ai-metrics/detail", h.AdminMetricsDetail)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, authed(httptest.NewRequest("GET", "/admin/ai-metrics/detail?panel=citations", nil), token))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("citations panel returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var out struct {
+		Rows []struct {
+			Primary string `json:"primary"`
+			Link    string `json:"link"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	want := map[string]string{
+		"Cited Paper":       "/research/" + paperID,
+		"Cited Project":     "/projects/" + projectID,
+		"Cited Archive Doc": "/archive/" + archiveItem,
+	}
+	seen := map[string]bool{}
+	for _, row := range out.Rows {
+		if expect, ok := want[row.Primary]; ok {
+			seen[row.Primary] = true
+			if row.Link != expect {
+				t.Errorf("%q linked to %q, want %q", row.Primary, row.Link, expect)
+			}
+		}
+	}
+	for title := range want {
+		if !seen[title] {
+			t.Errorf("%q missing from the citations panel", title)
+		}
+	}
+}

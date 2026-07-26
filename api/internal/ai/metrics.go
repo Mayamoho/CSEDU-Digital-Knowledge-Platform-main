@@ -162,6 +162,25 @@ func (h *Handler) AdminMetrics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// detailLink builds the URL a citation should point at.
+//
+// A research paper or student project that has lost its child row (or was never
+// given one) has no working detail route, so it falls back to the archive view,
+// which is keyed by item_id and renders any media item.
+func detailLink(itemType, itemID string, paperID, projectID *string) string {
+	switch itemType {
+	case "research":
+		if paperID != nil && *paperID != "" {
+			return "/research/" + *paperID
+		}
+	case "project":
+		if projectID != nil && *projectID != "" {
+			return "/projects/" + *projectID
+		}
+	}
+	return "/archive/" + itemID
+}
+
 // GET /api/v1/admin/ai-metrics/detail?panel=…&day=YYYY-MM-DD
 //
 // Backs the clickable cards and the clickable bars on the usage chart. A number
@@ -229,13 +248,23 @@ func (h *Handler) AdminMetricsDetail(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "citations":
-		// Which documents the assistant actually leans on. Answers that cite
-		// nothing are the ones worth investigating, so they get a row too.
+		// Which documents the assistant actually leans on.
+		//
+		// The detail routes do not all key off item_id: /research/{id} resolves a
+		// research_papers.paper_id and /projects/{id} a student_projects.project_id,
+		// while /archive/{id} really is the media item. Linking every row by
+		// item_id therefore 404'd for papers and projects, so the id each route
+		// actually expects is resolved here.
 		q, err := h.db.Query(ctx, `
-			SELECT mi.title, mi.item_type, COUNT(*)::int, mi.item_id::text
+			SELECT mi.title, mi.item_type, COUNT(*)::int,
+			       mi.item_id::text,
+			       MAX(rp.paper_id::text)   AS paper_id,
+			       MAX(sp.project_id::text) AS project_id
 			FROM ai_chat_messages m
 			CROSS JOIN LATERAL unnest(m.source_doc_ids) AS src(id)
 			JOIN media_items mi ON mi.item_id = src.id
+			LEFT JOIN research_papers  rp ON rp.item_id = mi.item_id
+			LEFT JOIN student_projects sp ON sp.item_id = mi.item_id
 			GROUP BY mi.title, mi.item_type, mi.item_id
 			ORDER BY COUNT(*) DESC LIMIT 25`)
 		if err != nil {
@@ -246,16 +275,10 @@ func (h *Handler) AdminMetricsDetail(w http.ResponseWriter, r *http.Request) {
 		for q.Next() {
 			var it row
 			var itemType, itemID string
-			if q.Scan(&it.Primary, &itemType, &it.Count, &itemID) == nil {
+			var paperID, projectID *string
+			if q.Scan(&it.Primary, &itemType, &it.Count, &itemID, &paperID, &projectID) == nil {
 				it.Secondary = itemType
-				switch itemType {
-				case "research":
-					it.Link = "/research/" + itemID
-				case "project":
-					it.Link = "/projects/" + itemID
-				default:
-					it.Link = "/archive/" + itemID
-				}
+				it.Link = detailLink(itemType, itemID, paperID, projectID)
 				rows = append(rows, it)
 			}
 		}
