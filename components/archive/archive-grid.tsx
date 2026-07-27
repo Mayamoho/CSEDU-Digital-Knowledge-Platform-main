@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { FolderOpen, Calendar, User, Download, Eye, Archive, ExternalLink } from "lucide-react";
 import { CatalogPagination } from "@/components/catalog/catalog-pagination";
+import { mediaFileUrl } from "@/lib/media-url";
 
 const accessTierConfig = {
   public: { label: "Public", variant: "default" as const },
@@ -39,7 +40,7 @@ function ArchiveThumbnail({ item }: { item: MediaItem }) {
       className="-mt-6 -mx-6 mb-3 block overflow-hidden rounded-t-xl bg-muted"
     >
       <img
-        src={`/api/v1/media/${item.item_id}/download?inline=1`}
+        src={mediaFileUrl(item.item_id, item.file_path, { inline: true })}
         alt={item.title}
         loading="lazy"
         onError={() => setFailed(true)}

@@ -34,6 +34,7 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
+import { mediaFileUrl } from "@/lib/media-url";
 
 interface MediaDetailViewProps {
   itemId: string;
@@ -90,7 +91,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
   useEffect(() => { loadItem(); }, [itemId]);
 
   const handleDownload = async () => {
-    window.location.href = `/api/v1/media/${itemId}/download`;
+    window.location.href = mediaFileUrl(itemId, item?.file_path);
   };
 
   const handleShare = async () => {
@@ -160,7 +161,7 @@ export function MediaDetailView({ itemId, itemType }: MediaDetailViewProps) {
 
   const canEdit = user && (user.user_id === item.created_by || user.role_tier === "administrator" || user.role_tier === "librarian");
   const showImage = item.file_path && isImageFormat(item.format) && !imageFailed;
-  const imageUrl = `/api/v1/media/${itemId}/download?inline=1`;
+  const imageUrl = mediaFileUrl(itemId, item.file_path, { inline: true });
 
   return (
     <div className="container max-w-4xl px-4 py-8">

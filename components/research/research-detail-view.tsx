@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { FileText, Calendar, User, Download, Edit, ArrowLeft, AlertCircle, Send, CheckCircle, XCircle, BookOpen, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { ResourceInsights } from "@/components/ai-chat/resource-insights";
+import { mediaFileUrl } from "@/lib/media-url";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -306,7 +307,7 @@ export function ResearchDetailView({ paperId }: { paperId: string }) {
 
           {paper.file_path && (
             <Button variant="outline" asChild>
-              <a href={`/api/v1/media/${paper.item_id}/download`} download>
+              <a href={mediaFileUrl(paper.item_id, paper.file_path)} download>
                 <Download className="h-4 w-4 mr-2" /> Download Paper
               </a>
             </Button>

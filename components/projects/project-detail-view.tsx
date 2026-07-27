@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { BookOpen, Calendar, Users, User, ExternalLink, Github, Globe, Smartphone, Download, Edit, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { ResourceInsights } from "@/components/ai-chat/resource-insights";
+import { mediaFileUrl } from "@/lib/media-url";
 
 const statusConfig: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
   draft: { label: "Draft", variant: "secondary" },
@@ -197,7 +198,7 @@ export function ProjectDetailView({ projectId }: { projectId: string }) {
               )}
               {project.file_path && (
                 <Button variant="outline" asChild>
-                  <a href={`/api/v1/media/${project.item_id}/download`} download>
+                  <a href={mediaFileUrl(project.item_id, project.file_path)} download>
                     <Download className="h-4 w-4 mr-2" /> Download File
                   </a>
                 </Button>

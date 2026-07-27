@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -559,6 +560,18 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The download URL is the same before and after a file replacement, so a
+	// cached copy would keep serving the superseded file. The stored object key
+	// is a fresh UUID on every replacement, which makes it a reliable version
+	// tag: hand it out as the ETag and let the browser revalidate.
+	etag := `"` + fmt.Sprintf("%x", sha256.Sum256([]byte(filePath)))[:32] + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, no-cache, max-age=0, must-revalidate")
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	// Stream the object directly from MinIO to the client
 	obj, err := h.minio.GetObject(r.Context(), filePath)
 	if err != nil {
@@ -606,7 +619,6 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	filename := title + "." + format
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", disposition+`; filename="`+filename+`"`)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
 
 	if _, err := io.Copy(w, obj); err != nil {
 		// Client likely disconnected; log but don't write error (headers already sent)
@@ -817,7 +829,12 @@ func (h *Handler) ReplaceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "item not found")
 		return
 	}
-	if createdBy == nil || *createdBy != userID {
+	// Same rule as UpdateMetadata: owners plus staff. The edit dialog offers
+	// Replace File to librarians and administrators, so refusing them here left
+	// the metadata saved and the file silently unchanged.
+	roleTier, _ := authpkg.GetRoleTier(r)
+	isOwner := createdBy != nil && *createdBy == userID
+	if !isOwner && roleTier != "librarian" && roleTier != "administrator" {
 		writeError(w, http.StatusForbidden, "you can only replace files on your own uploads")
 		return
 	}
