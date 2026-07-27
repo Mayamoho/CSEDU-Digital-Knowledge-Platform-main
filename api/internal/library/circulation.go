@@ -163,11 +163,18 @@ func (h *Handler) CirculationReturn(w http.ResponseWriter, r *http.Request) {
 		           (SELECT name FROM users WHERE user_id = loans.user_id)`,
 		catalogID,
 	).Scan(&loanID, &memberName); err != nil {
-		writeError(w, http.StatusConflict, "no active loan found for this item")
+		// Nothing to check in. The usual reason a librarian lands here is that
+		// the copy came back earlier and only the fine is still open — the desk
+		// used to answer with a bare "no active loan", which reads like the scan
+		// failed. Report what actually happened to the last loan instead.
+		h.writeNoActiveLoan(w, r, catalogID, title)
 		return
 	}
 
-	// Late fine — same formula as the member self-return path.
+	// Late fine — same formula as the member self-return path. The overdue
+	// worker may already have filed a pending fine for this loan while it was
+	// still out; its amount was computed on an earlier day, so refresh it to the
+	// final figure rather than leaving the stale (lower) one.
 	_, _ = tx.Exec(r.Context(), `
 		INSERT INTO fines (loan_id, user_id, amount, status, calculated_at)
 		SELECT loan_id, user_id,
@@ -176,7 +183,16 @@ func (h *Handler) CirculationReturn(w http.ResponseWriter, r *http.Request) {
 		FROM loans
 		WHERE loan_id = $1
 		  AND return_date >= due_date + interval '1 day'
-		ON CONFLICT (loan_id) DO NOTHING`, loanID)
+		ON CONFLICT (loan_id) DO UPDATE
+		   SET amount = EXCLUDED.amount, calculated_at = now()
+		 WHERE fines.status = 'pending' AND EXCLUDED.amount > fines.amount`, loanID)
+
+	// Tell the librarian at the desk what is still owed on this loan, so the
+	// fine can be collected while the member is standing there.
+	var fineDue float64
+	_ = tx.QueryRow(r.Context(),
+		`SELECT COALESCE(SUM(amount), 0)::float8 FROM fines
+		 WHERE loan_id = $1 AND status = 'pending'`, loanID).Scan(&fineDue)
 
 	_, _ = tx.Exec(r.Context(),
 		`UPDATE library_catalog SET available_copies = available_copies + 1
@@ -191,10 +207,55 @@ func (h *Handler) CirculationReturn(w http.ResponseWriter, r *http.Request) {
 	_ = h.fulfillOldestHold(r, catalogID)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"message":     "return recorded",
-		"loan_id":     loanID,
-		"member_name": memberName,
-		"title":       title,
+		"message":          "return recorded",
+		"loan_id":          loanID,
+		"member_name":      memberName,
+		"title":            title,
+		"outstanding_fine": fineDue,
+	})
+}
+
+// writeNoActiveLoan explains why a scanned item had nothing to check in: it is
+// already back on the shelf (and possibly still carrying an unpaid fine), or it
+// was never lent out at all.
+func (h *Handler) writeNoActiveLoan(w http.ResponseWriter, r *http.Request, catalogID, title string) {
+	var memberName, returnedOn string
+	var fineDue float64
+	err := h.db.QueryRow(r.Context(), `
+		SELECT u.name,
+		       to_char(l.return_date, 'YYYY-MM-DD'),
+		       COALESCE((SELECT SUM(f.amount) FROM fines f
+		                  WHERE f.loan_id = l.loan_id AND f.status = 'pending'), 0)::float8
+		FROM loans l
+		JOIN users u ON u.user_id = l.user_id
+		WHERE l.catalog_id = $1 AND l.return_date IS NOT NULL
+		ORDER BY l.return_date DESC
+		LIMIT 1`, catalogID).Scan(&memberName, &returnedOn, &fineDue)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"message": fmt.Sprintf(
+				"“%s” is not on loan — no member currently has this item out, so there is nothing to check in.",
+				title),
+			"already_returned": false,
+			"outstanding_fine": 0,
+		})
+		return
+	}
+
+	msg := fmt.Sprintf(
+		"“%s” is already back — %s returned it on %s, so there is no open loan to close.",
+		title, memberName, returnedOn)
+	if fineDue > 0 {
+		msg += fmt.Sprintf(
+			" An unpaid fine of %.2f BDT is still on that loan; settle it under Admin → Fines (returning the book again will not clear it).",
+			fineDue)
+	}
+	writeJSON(w, http.StatusConflict, map[string]any{
+		"message":          msg,
+		"already_returned": true,
+		"returned_on":      returnedOn,
+		"member_name":      memberName,
+		"outstanding_fine": fineDue,
 	})
 }
 

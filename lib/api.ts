@@ -449,6 +449,7 @@ class APIClient {
 
   async circulationReturn(itemBarcode: string): Promise<{
     message: string; loan_id: string; member_name: string; title: string;
+    outstanding_fine: number;
   }> {
     return this.request(`/library/circulation/return`, {
       method: 'POST',

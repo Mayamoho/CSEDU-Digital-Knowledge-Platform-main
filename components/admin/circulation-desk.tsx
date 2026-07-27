@@ -140,10 +140,16 @@ function ReturnTab() {
     try {
       setBusy(true);
       const res = await apiClient.circulationReturn(item);
-      toast.success(`Returned: "${res.title}" from ${res.member_name}`);
+      toast.success(`Returned: "${res.title}" from ${res.member_name}`, {
+        description: res.outstanding_fine > 0
+          ? `Overdue fine of ${res.outstanding_fine.toFixed(2)} BDT is due — collect it under Admin → Fines.`
+          : undefined,
+      });
       setItemCode("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Return failed");
+      // The API explains a failed return in full (already back on the shelf,
+      // unpaid fine still open); keep the toast up long enough to read it.
+      toast.error(err instanceof Error ? err.message : "Return failed", { duration: 10000 });
     } finally {
       setBusy(false);
     }
